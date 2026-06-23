@@ -77,6 +77,10 @@ def main(argv=None) -> int:
     prd.add_argument("files", nargs="+")
     prd.add_argument("--json", action="store_true")
 
+    po = sub.add_parser("outline", help="a file's signatures + line numbers, no bodies")
+    po.add_argument("files", nargs="+")
+    po.add_argument("--json", action="store_true")
+
     pi = sub.add_parser("index", help="build the code symbol index")
     pi.add_argument("path", nargs="?", default=".")
     pi.add_argument("--json", action="store_true")
@@ -162,6 +166,25 @@ def main(argv=None) -> int:
         if args.json:
             print(json.dumps(results if len(results) > 1 else results[0]))
         return 0
+
+    if args.cmd == "outline":
+        from .outline import file_outline
+        rc = 1
+        results = []
+        for f in args.files:
+            text, st = file_outline(f)
+            if args.json:
+                results.append({"file": f, **st, "outline": text})
+            else:
+                if st["ok"]:
+                    print(text, end="")
+                else:
+                    print(f"skip  {f}  ({st['note']})")
+            if st["ok"]:
+                rc = 0
+        if args.json:
+            print(json.dumps(results if len(results) > 1 else results[0]))
+        return rc
 
     if args.cmd == "retrieve":
         origin = cache.lookup_origin(args.artifact)

@@ -90,6 +90,17 @@ TOOLS = [
         },
     },
     {
+        "name": "justokenmax_outline",
+        "description": "Return a source file's shape — every function/class/"
+                       "method with its signature, line number, and docstring, "
+                       "no bodies. Far cheaper than reading the whole file.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    },
+    {
         "name": "justokenmax_retrieve",
         "description": "Given an optimized artifact path, return the original "
                        "file it was produced from (reverses compression).",
@@ -111,6 +122,12 @@ def _tool_optimize(args):
     from justokenmax import optimize
     r = optimize(args["path"])
     return json.dumps(r.to_dict())
+
+
+def _tool_outline(args):
+    from justokenmax.outline import file_outline
+    text, st = file_outline(args["path"])
+    return text if st.get("ok") else f"outline unavailable: {st.get('note')}"
 
 
 def _tool_compress_json(args):
@@ -158,6 +175,7 @@ DISPATCH = {
     "justokenmax_compress_json": _tool_compress_json,
     "justokenmax_compress_log": _tool_compress_log,
     "justokenmax_query": _tool_query,
+    "justokenmax_outline": _tool_outline,
     "justokenmax_delta": _tool_delta,
     "justokenmax_redact": _tool_redact,
     "justokenmax_retrieve": _tool_retrieve,
