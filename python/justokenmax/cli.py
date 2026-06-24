@@ -119,7 +119,7 @@ def main(argv=None) -> int:
                            ("uninstall", "remove the MCP server from a coding agent")):
         sp = sub.add_parser(verb, help=helptext)
         sp.add_argument("agent", nargs="?", choices=AGENTS,
-                        help="codex|opencode|cursor|claude (default: auto-detect)")
+                        help=f"{'|'.join(AGENTS)} (default: auto-detect)")
         sp.add_argument("--dry-run", action="store_true",
                         help="show what would change without writing")
         sp.add_argument("--json", action="store_true")
