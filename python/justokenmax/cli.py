@@ -101,6 +101,11 @@ def main(argv=None) -> int:
     sub.add_parser("stats").add_argument("--json", action="store_true")
     sub.add_parser("mcp", help="run the MCP server over stdio (any MCP agent)")
 
+    pxy = sub.add_parser("proxy",
+                         help="compress a downstream MCP server's output for any agent")
+    pxy.add_argument("downstream", nargs=argparse.REMAINDER,
+                     help="-- <command ...> for the downstream MCP server")
+
     pc = sub.add_parser("config", help="show or toggle which levers are enabled")
     pc.add_argument("action", nargs="?", choices=("enable", "disable"),
                     help="enable/disable a lever (omit to show current config)")
@@ -213,6 +218,13 @@ def main(argv=None) -> int:
         from .mcp_server import main as mcp_main
         mcp_main()
         return 0
+
+    if args.cmd == "proxy":
+        from .proxy import run
+        down = args.downstream
+        if down and down[0] == "--":
+            down = down[1:]
+        return run(down)
 
     if args.cmd == "config":
         from . import config as cfg
