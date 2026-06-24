@@ -6,7 +6,8 @@ integrations where they exist.
 ## One command (recommended)
 
 ```bash
-justokenmax install [codex|opencode|cursor|claude]   # omit to auto-detect
+justokenmax install [codex|opencode|cursor|claude|gemini|qwen|cline|kilocode|omp]
+justokenmax install                                  # omit to auto-detect
 justokenmax uninstall [agent]
 justokenmax install --dry-run                        # preview the change
 ```
@@ -24,6 +25,11 @@ anyone with Node — even **no Python** (see [Installation](Installation)).
 | OpenCode | `~/.config/opencode/opencode.json` | `mcp` (type `local`) |
 | Cursor | `~/.cursor/mcp.json` | `mcpServers` |
 | Claude Code | project `.mcp.json` | `mcpServers` |
+| Gemini CLI | `~/.gemini/settings.json` | `mcpServers` |
+| Qwen | `~/.qwen/settings.json` | `mcpServers` (format assumed Gemini-compatible, not verified on a live Qwen instance) |
+| Cline | `~/.cline/data/settings/cline_mcp_settings.json` | `mcpServers` |
+| Kilo Code | `~/.config/kilo/kilo.jsonc` | `mcp` (type `local`) |
+| oh-my-pi (omp) | `~/.omp/agent/mcp.json` | `mcpServers` (type `stdio`) |
 
 ## Manual (Codex example)
 
