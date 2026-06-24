@@ -1,127 +1,87 @@
-# Try jusTokenMax in 5 minutes — see the savings, on vs off
+# Try jusTokenMax in 5 minutes
 
-A hands-on walkthrough you can copy-paste. Scenario: you're asking your agent to
-**"build a website that lists these products"** — and you're feeding it a big
-product **CSV**, a **PDF spec**, and a noisy **build log**. Those three inputs
-are what blow up the token bill. Here's jusTokenMax shrinking them, and what
-happens when you turn it off.
+Get it running, then measure the savings on a realistic development task — once
+with jusTokenMax **on**, once **off**.
 
-## 0. Install
+---
 
-```bash
-git clone https://github.com/Kalmantic/jusTokenMax && cd jusTokenMax
-pip install pypdf Pillow ./python
-justokenmax --version
-export JUSTOKENMAX_HOME=$(mktemp -d)/.jtm     # use a throwaway cache for this demo
-```
+## 1. Install in Claude Code (recommended)
 
-## 1. Make the sample inputs
-
-```bash
-# a 5,000-row product catalog (CSV)
-python - <<'PY'
-import csv
-with open("products.csv", "w", newline="") as f:
-    w = csv.writer(f); w.writerow(["id","name","price","in_stock"])
-    for i in range(5000):
-        w.writerow([i, f"Product {i}", round(i*1.99,2), i%2==0])
-PY
-
-# a noisy build log
-{ for i in $(seq 1 4000); do echo "[12:00:0$((i%9))] DEBUG bundling chunk_$i"; done;
-  printf 'fetching dep\n%.0s' {1..200}; echo "ERROR: build failed"; } > build.log
-```
-
-## 2. Feature ON — watch it shrink
-
-```bash
-justokenmax optimize products.csv build.log
-```
-
-You'll see something like:
-
-```
-ok    products.csv
-      -> .../<hash>.csv.md
-      57,340 -> 237 tokens (-57,103, -99%)  [csv]  5000 rows x 4 cols
-ok    build.log
-      -> .../<hash>.log.txt
-      44,160 -> 230 tokens (-43,930, -99%)  [log]  ...
-```
-
-The CSV became a schema + sample rows; the log became a digest. Your agent gets
-all the **shape** it needs to build the site, at ~1% of the tokens. Check the
-running total:
-
-```bash
-justokenmax stats
-# justokenmax: 100,000+ tokens saved across 2 runs
-```
-
-## 3. Feature OFF — optimize your way
-
-Don't want CSV touched (maybe you need every row)? Turn that lever off:
-
-```bash
-justokenmax config disable csv
-justokenmax optimize products.csv     # -> skip  products.csv  (disabled by config)
-justokenmax config                    #  csv  OFF   (everything else still on)
-justokenmax config enable csv         # back on
-```
-
-Same with `JUSTOKENMAX_DISABLE=pdf,image justokenmax optimize ...` for a one-off.
-
-## 4. In Claude Code — it's automatic
-
-Install it as a Claude Code plugin. From inside Claude Code, run these three
-slash commands **one at a time** — Claude Code takes a single slash command per
-prompt, so don't paste all three together:
+From inside Claude Code, run these **one at a time** — Claude Code takes a single
+slash command per prompt, so don't paste all three together:
 
 1. `/plugin marketplace add https://github.com/Kalmantic/jusTokenMax.git`
 2. `/plugin install justokenmax@justokenmax`
 3. `/reload-plugins`
 
-(Non-interactive equivalent in a terminal: `claude plugin marketplace add
-https://github.com/Kalmantic/jusTokenMax.git` then `claude plugin install
-justokenmax@justokenmax`.)
+Now when your agent **reads** a PDF / log / JSON / CSV / notebook / diff, the
+`Read` hook transparently swaps in jusTokenMax's cheap artifact — you do nothing.
 
-The plugin's hook needs the `justokenmax` CLI on your `PATH` — if you cloned and
-`pip install ./python`'d in step 0 you're set; otherwise `pip install justokenmax`
-(or just have Node, and it auto-provisions via `npx`/`uv`).
+The hook calls the `justokenmax` CLI, so you need it on your `PATH` (step 2
+below), **or** just have Node (it auto-provisions Python via `npx`/`uv`).
 
-Now when your agent **reads** `products.csv` / `build.log` / a PDF spec while
-building the site, the `Read` hook transparently swaps in the cheap artifact —
-you do nothing. Turn a lever off with `justokenmax config disable <kind>` and the
-hook leaves that file untouched. Run `justokenmax stats` anytime to see the
-lifetime savings.
-
-Prefer just the tools (no auto-hook)? `justokenmax install claude` registers the
-MCP server in a project `.mcp.json` instead (remove it with `justokenmax
-uninstall claude`).
-
-**To uninstall the plugin** later, run these one at a time:
+**To uninstall** later (one at a time):
 
 1. `/plugin uninstall justokenmax@justokenmax`
 2. `/plugin marketplace remove justokenmax`
 3. `/reload-plugins`
 
-## 5. In Codex CLI / OpenCode / Cursor
+---
+
+## 2. Or: the CLI and other agents
 
 ```bash
-justokenmax install            # auto-detects and registers the MCP server
-# ...then in that agent, the justokenmax_* tools are available.
+git clone https://github.com/Kalmantic/jusTokenMax && cd jusTokenMax
+pip install pypdf Pillow ./python      # installs the `justokenmax` CLI
+justokenmax --version
+```
+
+Register it with any MCP agent (auto-detects Codex / OpenCode / Cursor / Claude):
+
+```bash
+justokenmax install            # seamless + reversible
 justokenmax uninstall          # clean removal
 ```
 
-## 6. The real test — extend a website codebase, then measure
+**Node but no Python?** The registered command is `npx -y @kalmantic/justokenmax
+mcp`, which auto-provisions Python via `uv` — zero manual setup.
 
-The bigger use case isn't a one-shot build — it's **day-to-day development on an
-existing website**, where the token bill is dominated by the agent *reading*
-source files, the lockfile, build output, and **re-reading** them as it
-iterates. That's exactly where jusTokenMax saves tokens. Here's a self-contained
+---
+
+## 3. See it work — inputs, and a lever on vs off
+
+```bash
+export JUSTOKENMAX_HOME=$(mktemp -d)/.jtm     # throwaway cache for the demo
+
+# a 5,000-row product catalog + a noisy build log
+python - <<'PY'
+import csv
+with open("products.csv","w",newline="") as f:
+    w=csv.writer(f); w.writerow(["id","name","price","in_stock"])
+    for i in range(5000): w.writerow([i,f"Product {i}",round(i*1.99,2),i%2==0])
+PY
+{ for i in $(seq 1 4000); do echo "[12:00:0$((i%9))] DEBUG bundling chunk_$i"; done;
+  echo "ERROR: build failed"; } > build.log
+
+justokenmax optimize products.csv build.log     # -> ~ -99% each
+justokenmax stats                                # running total of tokens saved
+
+# turn a lever off — your project, your way
+justokenmax config disable csv
+justokenmax optimize products.csv                # -> skip (disabled by config)
+justokenmax config enable csv
+```
+
+---
+
+## 4. Measure it on a real dev task — extend a website codebase
+
+The bigger use case is **day-to-day development on an existing website**, where
+the token bill is dominated by the agent *reading* source files, the lockfile,
+and build output — and **re-reading** them as it iterates. Here's a self-contained
 project to prove it.
 
-### Scaffold a small e-commerce website project
+### Scaffold a small e-commerce website
 
 ```bash
 mkdir -p shopsite/src shopsite/public shopsite/data && cd shopsite
@@ -158,7 +118,7 @@ export const ${m}Defaults = { enabled: true, limit: 50 };
 JS
 done
 
-# 5,000-row product catalog + a noisy build log
+# 5,000-row product catalog + a noisy build log with a real error
 python3 - <<'PY'
 import csv
 with open("data/products.csv","w",newline="") as f:
@@ -170,7 +130,6 @@ PY
 
 printf '<!doctype html><html><body><div id="app"></div><script type="module" src="../src/render.js"></script></body></html>' > public/index.html
 cd ..
-echo "scaffolded ./shopsite"
 ```
 
 ### The prompt (paste into your agent, working inside `shopsite/`)
@@ -181,43 +140,50 @@ echo "scaffolded ./shopsite"
 > 2. a **shopping cart** that persists in `localStorage`,
 > 3. a **dark-mode toggle**.
 >
-> Work like a real engineer:
-> - First **explore the codebase** to understand how the modules fit together
->   (catalog, cart, filters, render, api, utils, format, storage) before changing
->   anything.
-> - Check `package.json` and the dependency tree, and skim `package-lock.json` if
->   you need to confirm a version.
-> - Wire the data from `data/products.csv` into the catalog.
-> - Implement the features across the relevant `src/*.js` modules and update
->   `public/index.html`.
-> - Read `build.log` to see the current build error and make sure your changes
->   address it.
-> - After each edit, re-read the file you changed to verify it, and re-check
->   `build.log` at the end.
+> Work like a real engineer: first **explore the codebase** to see how the
+> modules fit together (catalog, cart, filters, render, api, utils, format,
+> storage) before changing anything; check `package.json` and the dependency tree
+> (skim `package-lock.json` if needed); wire the data from `data/products.csv`
+> into the catalog; implement across the relevant `src/*.js` modules and update
+> `public/index.html`; read `build.log` to see the current build error and make
+> sure your changes address it; and after each edit, re-read the file you changed
+> to verify it.
 
-This is a normal dev loop: it **navigates 8 source modules**, reads
-`package.json` + the big `package-lock.json`, the **5,000-row CSV**, the noisy
-**build log**, and **re-reads** files as it edits — every one of which
-jusTokenMax compresses (code index/outline, JSON, diff, CSV, log, delta).
+### Reproduce the numbers
 
-### Measure it (on vs off)
+Without an agent, you can reproduce the input savings directly:
 
-1. **jusTokenMax ON** (plugin installed, or `justokenmax install`). Optionally
-   pre-build the symbol index so navigation is cheap:
+```bash
+justokenmax index shopsite                     # 32 symbols across 8 files
+justokenmax optimize shopsite/package-lock.json shopsite/build.log shopsite/data/products.csv
+for f in shopsite/src/*.js; do justokenmax outline "$f" >/dev/null; done
+```
+
+Summed with a real tokenizer, **one pass through these inputs**:
+
+| Input the agent reads | Before | After | Reduction |
+| --- | ---: | ---: | ---: |
+| 8 source modules (read → outline) | 872 | 520 | −40% |
+| `package-lock.json` | 126,426 | 102,414 | −18% |
+| `products.csv` (5,000 rows) | 82,506 | 290 | −99% |
+| `build.log` | 50,015 | 521 | −98% |
+| **Total** | **259,819** | **103,745** | **−60%** |
+
+(The source-module saving is small only because these demo modules are tiny — on
+real files it's far larger, and every **re-read** while editing is near-free via
+delta.)
+
+### The on/off A/B (with a live agent)
+
+1. **jusTokenMax ON** — run the prompt, then check Claude Code's context/cost with
+   **`/cost`** and **`justokenmax stats`**.
+2. **Turn it OFF**, `/clear`, and run the **identical** prompt:
    ```bash
-   justokenmax index shopsite
+   justokenmax config disable json diff csv log      # or uninstall the plugin
    ```
-   Run the prompt. When it finishes, check Claude Code's context/cost with
-   **`/cost`**, and run **`justokenmax stats`** for the tokens it saved.
-2. **Turn it OFF**, `/clear`, and run the **identical** prompt again:
-   ```bash
-   justokenmax config disable json diff csv log     # or uninstall the plugin
-   ```
-3. **Compare `/cost`.** The "off" run drags whole source files, the full
-   `package-lock.json`, the raw CSV, and the noisy log into context — and pays
-   again on every re-read. The "on" run carries outlines, digests, and diffs.
-   In a real multi-file dev loop the input savings compound; re-enable with
-   `justokenmax config enable json diff csv log`.
+3. **Compare `/cost`.** The "off" run drags whole files, the full lockfile, the
+   raw CSV, and the noisy log into context — and pays again on every re-read.
+   Re-enable with `justokenmax config enable json diff csv log`.
 
 > Tip: keep the task identical and `/clear` between runs so the only variable is
 > jusTokenMax on vs off.

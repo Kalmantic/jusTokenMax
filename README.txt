@@ -46,6 +46,20 @@ cheaper equivalent, BEFORE it costs you a token.
   Finding a symbol vs reading the file      -97%
 
 
+QUICKSTART - TRY IT
+------------------------------------------------------------------------------
+Fastest path, inside Claude Code (run one at a time - one slash command per
+prompt):
+  1. /plugin marketplace add https://github.com/Kalmantic/jusTokenMax.git
+  2. /plugin install justokenmax@justokenmax
+  3. /reload-plugins
+Reading PDFs/logs/JSON/CSV/notebooks/diffs is then compressed automatically.
+Full 5-minute hands-on with a real dev task + on/off measurement: docs/try-it.md
+
+In a real dev loop, one pass through a small website project's inputs:
+259,819 -> 103,745 tokens (-60%), measured - and it compounds on re-reads.
+
+
 BUILT FOR CASUAL USERS *AND* ENTERPRISE - FROM DAY ONE
 ------------------------------------------------------------------------------
 The same tool serves a solo developer and a regulated enterprise, by design -
@@ -187,6 +201,10 @@ CSV:             5,000 rows           57,340 -> 237 tokens    -99%
 Delta re-read:   1 edit in 600 lines   2,407 ->  88 tokens    -96%
 Code index:      locate a symbol       16,691 -> 486 tokens    -97%  (21 lookups)
 Images:          3000x2000 -> 1568x1045   186 KB -> 107 KB     -42% bytes
+
+Real dev loop (one pass through a small website project's inputs - 8 src modules,
+a 10k-line package-lock.json, a 5,000-row CSV, a noisy build log):
+                 259,819 -> 103,745 tokens   -60%   (reproduce in docs/try-it.md)
 
 
 LIMITS & HONESTY

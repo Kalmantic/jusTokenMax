@@ -48,6 +48,31 @@ cheaper equivalent, **before** it costs you a token.
 
 ---
 
+## Quickstart — try it
+
+Fastest path, **inside Claude Code** (run these one at a time — one slash command
+per prompt):
+
+1. `/plugin marketplace add https://github.com/Kalmantic/jusTokenMax.git`
+2. `/plugin install justokenmax@justokenmax`
+3. `/reload-plugins`
+
+Now reading PDFs / logs / JSON / CSV / notebooks / diffs is compressed
+automatically. (The hook calls the `justokenmax` CLI — see [Install](#install)
+to add it; or just have Node and it auto-provisions.) Prefer the CLI or another
+agent? `justokenmax install` registers it for Codex / OpenCode / Cursor too.
+
+**👉 Full 5-minute hands-on with a real dev task and on/off measurement:
+[`docs/try-it.md`](docs/try-it.md).**
+
+> **In a real development loop** — one pass through a small website project's
+> inputs (8 source modules, a 10k-line `package-lock.json`, a 5,000-row CSV, a
+> noisy build log): **259,819 → 103,745 tokens (−60%)**, measured with a real
+> tokenizer — and it compounds as the agent re-reads files while editing.
+> Reproduce it step by step in [`docs/try-it.md`](docs/try-it.md).
+
+---
+
 ## Built for casual users *and* enterprise — from day one
 
 The same tool serves a solo developer and a regulated enterprise, by design — not
@@ -262,7 +287,23 @@ model at a conservative ~1,500 tokens/page. Full detail (regenerable) in
 jusTokenMax's own source: **16,691 → 486 tokens (−97%)**. **Images** — 3000×2000
 → 1568×1045, 186 KB → 107 KB (**−42% bytes**).
 
-Reproduce: `python benchmarks/benchmark.py --fetch`.
+**A real development loop** — one pass through a small website project's inputs
+(reproduce with the scaffold in [`docs/try-it.md`](docs/try-it.md)):
+
+| Input the agent reads | Tokens before | After | Reduction |
+| --- | ---: | ---: | ---: |
+| 8 source modules (read whole → outline) | 872 | 520 | −40% |
+| `package-lock.json` | 126,426 | 102,414 | −18% |
+| `products.csv` (5,000 rows) | 82,506 | 290 | −99% |
+| `build.log` | 50,015 | 521 | −98% |
+| **Total (one pass)** | **259,819** | **103,745** | **−60%** |
+
+(The source-module saving is small here only because the demo modules are tiny;
+on real files it's much larger — and every **re-read** during editing is near-free
+via delta.)
+
+Reproduce the benchmarks: `python benchmarks/benchmark.py --fetch`; reproduce the
+dev loop: [`docs/try-it.md`](docs/try-it.md).
 
 ## Use
 
