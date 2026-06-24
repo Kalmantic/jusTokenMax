@@ -187,6 +187,76 @@ def test_install_kilocode_preserves_comma_in_string_value(fake_home):
     assert "justokenmax" in data["mcp"]
 
 
+def test_install_kilocode_preserves_jsonc_block_comments(fake_home):
+    # A real kilo.jsonc may use /* block comments */ (valid JSONC). The
+    # installer must strip them, keep existing data, and add our entry --
+    # it must NOT silently abort just because the stripper only knew about //.
+    path = inst.config_path("kilocode")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(
+        "{\n"
+        "  /* kilo config */\n"
+        '  "theme": "dark",\n'
+        '  "mcp": {\n'
+        '    "other": {"type": "local", "command": ["other"]}\n'
+        "  }\n"
+        "}\n"
+    )
+    r = inst.install("kilocode")
+    assert r["changed"] and r["status"] == "installed"
+    data = json.loads(Path(path).read_text())
+    assert data["theme"] == "dark"            # top-level setting kept
+    assert "other" in data["mcp"]             # existing server kept
+    entry = data["mcp"]["justokenmax"]        # our entry added
+    assert entry["command"] == ["npx", "-y", "@kalmantic/justokenmax", "mcp"]
+
+
+def test_strip_json_comments_handles_block_comments():
+    # Block comments are valid JSONC and must be stripped to whitespace.
+    assert json.loads(inst._strip_json_comments(
+        '{ /* a // b */ "mcp": {} }')) == {"mcp": {}}
+    assert json.loads(inst._strip_json_comments(
+        '{\n  /* multi\n     line */\n  "x": 1\n}')) == {"x": 1}
+    # A /* sequence inside a quoted string is data, not a comment.
+    assert json.loads(inst._strip_json_comments(
+        '{"s": "a /* not a comment */ b"}')) == {"s": "a /* not a comment */ b"}
+
+
+def test_install_kilocode_handles_bom(fake_home):
+    # A UTF-8 BOM (common from Windows editors) must not make the installer
+    # treat an otherwise-valid config as unparseable and skip it.
+    path = inst.config_path("kilocode")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_bytes('﻿{"mcp": {"other": {"command": "x"}}}'.encode("utf-8"))
+    r = inst.install("kilocode")
+    assert r["changed"] and r["status"] == "installed"
+    data = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    assert "other" in data["mcp"]
+    assert data["mcp"]["justokenmax"]["command"] == [
+        "npx", "-y", "@kalmantic/justokenmax", "mcp"]
+
+
+def test_install_kilocode_url_and_escaped_quote_survive_jsonc_strip(fake_home):
+    # Regression guard: cases that ALREADY pass (// inside string, https:// URL,
+    # escaped-quote-then-//) must keep passing after the block-comment change.
+    path = inst.config_path("kilocode")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(
+        "{\n"
+        '  "url": "https://example.com",\n'
+        '  "k": "a\\" // still in string",\n'
+        '  "mcp": {"x": {"command": "a // not a comment"}}\n'
+        "}\n"
+    )
+    r = inst.install("kilocode")
+    assert r["changed"] and r["status"] == "installed"
+    data = json.loads(Path(path).read_text())
+    assert data["url"] == "https://example.com"
+    assert data["k"] == 'a" // still in string'
+    assert data["mcp"]["x"]["command"] == "a // not a comment"
+    assert "justokenmax" in data["mcp"]
+
+
 def test_install_aborts_on_unparseable_existing_file(fake_home):
     # Genuinely broken JSON (not just JSONC) must abort the write so we never
     # destroy the user's file by overwriting it with our minimal config.
@@ -198,3 +268,106 @@ def test_install_aborts_on_unparseable_existing_file(fake_home):
     assert r["changed"] is False
     assert r["status"] == "parse error - left untouched"
     assert Path(path).read_text() == original           # bytes untouched
+
+
+def test_block_comment_jsonc_not_clobbered_or_parsed(fake_home):
+    # Regression guard for the critical data-loss bug: a kilo.jsonc with a
+    # /* block comment */, an existing server, and a ui setting must be EITHER
+    # parsed-and-extended (block comments now supported) OR left byte-identical
+    # -- never clobbered down to just our entry.
+    path = inst.config_path("kilocode")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    original = (
+        "{\n"
+        "  /* Kilo Code config - do not delete */\n"
+        '  "mcp": {\n'
+        '    "existing": {"type": "local", "command": ["foo"]}\n'
+        "  },\n"
+        '  "ui": {"theme": "dark"}\n'
+        "}\n")
+    Path(path).write_text(original)
+    inst.install("kilocode")
+    data = json.loads(Path(path).read_text())
+    # existing server and ui setting must survive
+    assert data["mcp"]["existing"] == {"type": "local", "command": ["foo"]}
+    assert data["ui"] == {"theme": "dark"}
+    assert "justokenmax" in data["mcp"]
+
+
+# ---------------- parametrized end-to-end across every agent ----------------
+def _seed(agent):
+    path = inst.config_path(agent)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    if inst._AGENTS[agent]["fmt"] == "toml":
+        Path(path).write_text(
+            '[mcp_servers.other]\ncommand = "other-cmd"\nargs = ["x"]\n\n'
+            '[ui]\ntheme = "dark"\n')
+    else:
+        root = inst._AGENTS[agent]["root"]
+        Path(path).write_text(json.dumps(
+            {root: {"otherserver": {"command": "other", "args": ["z"]}},
+             "topLevelSetting": "keepme"}, indent=2))
+    return path
+
+
+@pytest.mark.parametrize("agent", inst.AGENTS)
+def test_roundtrip_from_empty(agent, fake_home):
+    r1 = inst.install(agent)
+    assert r1["changed"] and r1["status"] == "installed"
+    assert "@kalmantic/justokenmax" in Path(r1["path"]).read_text()
+    r2 = inst.uninstall(agent)
+    assert r2["changed"] and r2["status"] == "removed"
+    after = Path(r2["path"]).read_text() if Path(r2["path"]).exists() else ""
+    assert "justokenmax" not in after
+
+
+@pytest.mark.parametrize("agent", inst.AGENTS)
+def test_double_install_no_duplicate(agent, fake_home):
+    inst.install(agent)
+    r = inst.install(agent)
+    assert r["changed"] is False and r["status"] == "already configured"
+    text = Path(inst.config_path(agent)).read_text()
+    assert text.count("@kalmantic/justokenmax") == 1
+
+
+@pytest.mark.parametrize("agent", inst.AGENTS)
+def test_uninstall_when_absent(agent, fake_home):
+    r = inst.uninstall(agent)
+    assert r["changed"] is False and r["status"] == "not present"
+
+
+@pytest.mark.parametrize("agent", inst.AGENTS)
+def test_preserves_unrelated_server_and_setting(agent, fake_home):
+    path = _seed(agent)
+    inst.install(agent)
+    after_inst = Path(path).read_text()
+    inst.uninstall(agent)
+    after_uninst = Path(path).read_text()
+    if inst._AGENTS[agent]["fmt"] == "toml":
+        for blob in (after_inst, after_uninst):
+            assert "[mcp_servers.other]" in blob
+            assert "other-cmd" in blob
+            assert 'theme = "dark"' in blob
+        assert "[mcp_servers.justokenmax]" not in after_uninst
+    else:
+        root = inst._AGENTS[agent]["root"]
+        for blob in (after_inst, after_uninst):
+            d = json.loads(blob)
+            assert d[root]["otherserver"] == {"command": "other", "args": ["z"]}
+            assert d["topLevelSetting"] == "keepme"
+        assert inst.SERVER not in json.loads(after_uninst)[root]
+
+
+@pytest.mark.parametrize("agent", inst.AGENTS)
+def test_dry_run_install_writes_nothing(agent, fake_home):
+    r = inst.install(agent, dry_run=True)
+    assert r["changed"] and not Path(inst.config_path(agent)).exists()
+
+
+@pytest.mark.parametrize("agent", inst.AGENTS)
+def test_dry_run_uninstall_writes_nothing(agent, fake_home):
+    inst.install(agent)
+    before = Path(inst.config_path(agent)).read_text()
+    r = inst.uninstall(agent, dry_run=True)
+    assert r["changed"]
+    assert Path(inst.config_path(agent)).read_text() == before

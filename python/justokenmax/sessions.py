@@ -87,7 +87,9 @@ def read(limit: Optional[int] = None) -> List[dict]:
     if not p.exists():
         return []
     rows = []
-    for ln in p.read_text(encoding="utf-8").splitlines():
+    # `utf-8-sig` strips a leading BOM so the first row isn't silently dropped
+    # as an "Unexpected UTF-8 BOM" JSONDecodeError; a no-op without a BOM.
+    for ln in p.read_text(encoding="utf-8-sig").splitlines():
         if not ln.strip():
             continue
         try:

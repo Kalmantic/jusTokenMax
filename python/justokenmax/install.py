@@ -100,17 +100,18 @@ def detect() -> List[str]:
 
 
 def _strip_json_comments(text: str) -> str:
-    """Make JSONC parseable by stdlib `json`: drop `//` line-comments and any
-    trailing commas before `}`/`]`. Walks the text tracking in-string/escape
-    state so a `//` (or comma) inside a quoted value is left untouched — both the
-    comment-stripping and the trailing-comma removal run inside this single state
-    machine, never a blind regex over the whole text. Dependency-free."""
+    """Make JSONC parseable by stdlib `json`: drop `//` line-comments, `/* */`
+    block-comments, and any trailing commas before `}`/`]`. Walks the text
+    tracking in-string/escape state so a `//`, `/*` (or comma) inside a quoted
+    value is left untouched — both the comment-stripping and the trailing-comma
+    removal run inside this single state machine, never a blind regex over the
+    whole text. Dependency-free."""
     out = []
     in_str = False
     esc = False
     # Index into `out` of a pending `,` emitted outside any string. It becomes a
     # *trailing* comma only if the next significant char (scanning over
-    # out-of-string whitespace) is `}` or `]`; until then we keep it.
+    # out-of-string whitespace and comments) is `}` or `]`; until then we keep it.
     pending_comma = -1
     i, n = 0, len(text)
     while i < n:
@@ -138,6 +139,16 @@ def _strip_json_comments(text: str) -> str:
         if ch == "/" and i + 1 < n and text[i + 1] == "/":
             while i < n and text[i] != "\n":
                 i += 1
+            continue
+        # `/* ... */` block-comments are also valid JSONC (kilo.jsonc commonly
+        # uses them). Consume through the closing `*/` emitting nothing — like
+        # whitespace, so a pending comma stays pending. A stray `//` inside the
+        # block is part of the comment and must not chop it short.
+        if ch == "/" and i + 1 < n and text[i + 1] == "*":
+            i += 2
+            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
+                i += 1
+            i += 2  # skip the closing `*/` (or run off the end if unterminated)
             continue
         if ch == ",":
             pending_comma = len(out)
@@ -171,7 +182,10 @@ def _load_json(path: str):
     if not os.path.exists(path):
         return {}
     try:
-        text = Path(path).read_text(encoding="utf-8")
+        # `utf-8-sig` transparently strips a leading UTF-8 BOM (common from
+        # Windows editors) so an otherwise-valid config isn't treated as
+        # unparseable; it's a no-op when no BOM is present.
+        text = Path(path).read_text(encoding="utf-8-sig")
     except OSError:
         return _UNPARSEABLE
     if not text.strip():
