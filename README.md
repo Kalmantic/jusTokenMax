@@ -330,6 +330,7 @@ justokenmax redact secrets.txt                      # mask secrets + elide blobs
 justokenmax index && justokenmax query parse_config # build index, find a symbol
 justokenmax retrieve <artifact>                     # get the original back (reversible)
 justokenmax stats                                   # lifetime token savings
+justokenmax sessions                                # per-session savings (effectiveness over time)
 justokenmax install / uninstall [agent]             # register/remove the MCP server for any agent
 justokenmax config disable csv                      # turn a lever off (your project, your way)
 justokenmax proxy -- npx -y some-mcp-server         # compress ANY other MCP server's output
