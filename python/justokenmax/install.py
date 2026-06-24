@@ -61,7 +61,10 @@ _AGENTS = {
         "entry": {"command": "npx", "args": _NPX_ARGS},
     },
     "kilocode": {
-        # Kilo Code (v7.0.33+) uses a CLI-style config with an `mcp` key.
+        # Kilo Code (v7.0.33+) uses a CLI-style config with an `mcp` key. The
+        # file is `.jsonc`, so it may contain // comments and trailing commas —
+        # we parse it by stripping those (see `_strip_json_comments`) and never
+        # clobber an existing config we can't parse.
         "path": "~/.config/kilo/kilo.jsonc", "fmt": "json",
         "root": "mcp",
         "entry": {"type": "local", "command": ["npx"] + _NPX_ARGS},
@@ -96,13 +99,91 @@ def detect() -> List[str]:
     return found
 
 
-def _load_json(path: str) -> dict:
-    if os.path.exists(path):
-        try:
-            return json.loads(Path(path).read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            return {}
-    return {}
+def _strip_json_comments(text: str) -> str:
+    """Make JSONC parseable by stdlib `json`: drop `//` line-comments and any
+    trailing commas before `}`/`]`. Walks the text tracking in-string/escape
+    state so a `//` (or comma) inside a quoted value is left untouched — both the
+    comment-stripping and the trailing-comma removal run inside this single state
+    machine, never a blind regex over the whole text. Dependency-free."""
+    out = []
+    in_str = False
+    esc = False
+    # Index into `out` of a pending `,` emitted outside any string. It becomes a
+    # *trailing* comma only if the next significant char (scanning over
+    # out-of-string whitespace) is `}` or `]`; until then we keep it.
+    pending_comma = -1
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if in_str:
+            out.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            i += 1
+            continue
+        if ch == '"':
+            # A string opens, so any pending comma was followed by a value, not
+            # a closer: it is not trailing.
+            pending_comma = -1
+            in_str = True
+            out.append(ch)
+            i += 1
+            continue
+        # `//` outside a string starts a comment that runs to end of line. The
+        # comment is whitespace-equivalent, so a pending comma stays pending.
+        if ch == "/" and i + 1 < n and text[i + 1] == "/":
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        if ch == ",":
+            pending_comma = len(out)
+            out.append(ch)
+            i += 1
+            continue
+        if ch in "}]" and pending_comma != -1:
+            # The pending comma is trailing: drop it before emitting the closer.
+            out[pending_comma] = ""
+            pending_comma = -1
+            out.append(ch)
+            i += 1
+            continue
+        if not ch.isspace():
+            # Any other significant char clears the pending comma.
+            pending_comma = -1
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+# Sentinel: file exists but neither strict JSON nor JSONC parsing succeeded.
+# Callers must treat this as "leave the file untouched" rather than {}.
+_UNPARSEABLE = object()
+
+
+def _load_json(path: str):
+    """Return the parsed config dict, `{}` for a missing/fresh file, or the
+    `_UNPARSEABLE` sentinel for a present file we can't parse (so callers abort
+    instead of overwriting — never silently clobber a user's config)."""
+    if not os.path.exists(path):
+        return {}
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return _UNPARSEABLE
+    if not text.strip():
+        return {}
+    try:
+        return json.loads(text)
+    except ValueError:
+        pass
+    try:
+        return json.loads(_strip_json_comments(text))
+    except ValueError:
+        return _UNPARSEABLE
 
 
 def _write(path: str, text: str) -> None:
@@ -116,6 +197,11 @@ def _write(path: str, text: str) -> None:
 def _json_install(agent: str, path: str, dry: bool) -> Tuple[str, bool]:
     spec = _AGENTS[agent]
     data = _load_json(path)
+    if data is _UNPARSEABLE:
+        # Present-but-unparseable config: refuse to write so we never destroy
+        # the user's existing settings (protects every json agent, not kilocode
+        # alone). The user can fix the file by hand and re-run.
+        return "parse error - left untouched", False
     section = data.setdefault(spec["root"], {})
     if section.get(SERVER) == spec["entry"]:
         return "already configured", False
@@ -129,6 +215,8 @@ def _json_install(agent: str, path: str, dry: bool) -> Tuple[str, bool]:
 def _json_uninstall(agent: str, path: str, dry: bool) -> Tuple[str, bool]:
     root = _AGENTS[agent]["root"]
     data = _load_json(path)
+    if data is _UNPARSEABLE:
+        return "parse error - left untouched", False
     section = data.get(root, {})
     if SERVER not in section:
         return "not present", False

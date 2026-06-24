@@ -129,3 +129,72 @@ def test_install_omp(fake_home):
     assert p.endswith("/.omp/agent/mcp.json")
     data = json.loads(Path(p).read_text())
     assert data["mcpServers"]["justokenmax"]["command"] == "npx"
+
+
+# ---------------- data-loss guards (JSONC + unparseable) ----------------
+def test_install_kilocode_preserves_jsonc_with_comments(fake_home):
+    # A real kilo.jsonc with a // comment, an existing mcp server, and a
+    # top-level setting. stdlib json can't parse this directly — the installer
+    # must strip comments, keep everything, and add our entry without clobbering.
+    path = inst.config_path("kilocode")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(
+        "{\n"
+        '  // user preference\n'
+        '  "theme": "dark",\n'
+        '  "mcp": {\n'
+        '    "other": {"type": "local", "command": ["other"]}\n'
+        "  }\n"
+        "}\n"
+    )
+    r = inst.install("kilocode")
+    assert r["changed"] and r["status"] == "installed"
+    data = json.loads(Path(path).read_text())
+    assert data["theme"] == "dark"                      # top-level setting kept
+    assert "other" in data["mcp"]                       # existing server kept
+    entry = data["mcp"]["justokenmax"]                  # our entry added
+    assert entry["type"] == "local"
+    assert entry["command"] == ["npx", "-y", "@kalmantic/justokenmax", "mcp"]
+
+
+def test_strip_json_comments_preserves_commas_inside_strings():
+    # Trailing-comma stripping must be string-aware: a `,` inside a quoted value
+    # that happens to be followed by ws + `}`/`]` is data, not a trailing comma.
+    for src in ('{"s": "a,]"}', '{"s": "x,}y"}', '{"s": "1,  ]"}'):
+        assert json.loads(inst._strip_json_comments(src)) == json.loads(src)
+    # Genuine trailing commas (outside strings) are still removed, and a real
+    # `//` comment alongside a comma-bearing string value both round-trip.
+    src = '{\n  // c\n  "s": "a,]",\n  "arr": [1, 2,],\n}'
+    assert json.loads(inst._strip_json_comments(src)) == {"s": "a,]", "arr": [1, 2]}
+
+
+def test_install_kilocode_preserves_comma_in_string_value(fake_home):
+    # End-to-end: a kilo.jsonc whose string value contains `,]` must survive the
+    # JSONC parse path unchanged (regression for blind trailing-comma regex).
+    path = inst.config_path("kilocode")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(
+        "{\n"
+        '  // user preference\n'
+        '  "s": "a,]",\n'
+        '  "mcp": {}\n'
+        "}\n"
+    )
+    r = inst.install("kilocode")
+    assert r["changed"] and r["status"] == "installed"
+    data = json.loads(Path(path).read_text())
+    assert data["s"] == "a,]"                           # comma inside value kept
+    assert "justokenmax" in data["mcp"]
+
+
+def test_install_aborts_on_unparseable_existing_file(fake_home):
+    # Genuinely broken JSON (not just JSONC) must abort the write so we never
+    # destroy the user's file by overwriting it with our minimal config.
+    path = inst.config_path("cursor")
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    original = "{bad"
+    Path(path).write_text(original)
+    r = inst.install("cursor")
+    assert r["changed"] is False
+    assert r["status"] == "parse error - left untouched"
+    assert Path(path).read_text() == original           # bytes untouched

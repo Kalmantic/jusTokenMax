@@ -39,3 +39,24 @@ def test_read_limit():
         sessions.record()
     assert len(sessions.read(limit=2)) == 2
     assert len(sessions.read()) == 4
+
+
+def test_read_skips_corrupt_lines():
+    cache.record_savings(100, "log")
+    sessions.record()
+    cache.record_savings(100, "log")
+    sessions.record()
+    # Splice a garbage line between two good rows; read() must skip it, not crash.
+    p = sessions._sessions_path()
+    good = p.read_text(encoding="utf-8").splitlines()
+    p.write_text(good[0] + "\ngarbage\n" + good[1] + "\n", encoding="utf-8")
+    assert len(sessions.read()) == 2
+
+
+def test_record_appends_row():
+    cache.record_savings(700, "log")
+    row = sessions.record(session_id="s1")
+    assert row is not None and row["tokens_saved"] == 700
+    rows = sessions.read()
+    assert any(r.get("session_id") == "s1" and r["tokens_saved"] == 700
+               for r in rows)

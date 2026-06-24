@@ -49,16 +49,12 @@ def record(session_id: Optional[str] = None) -> Optional[dict]:
                for k in led.get("by_kind", {})
                if led["by_kind"][k] - prev_kind.get(k, 0) > 0}
 
-    # advance the snapshot regardless, so a session never double-counts
     cache.ROOT.mkdir(parents=True, exist_ok=True)
     cache._harden(cache.ROOT)
-    _snapshot_path().write_text(json.dumps({
-        "total_tokens_saved": led.get("total_tokens_saved", 0),
-        "runs": led.get("runs", 0),
-        "by_kind": led.get("by_kind", {}),
-    }), encoding="utf-8")
 
     if delta_total <= 0 and delta_runs <= 0:
+        # Nothing to log; still advance the snapshot so we don't re-count later.
+        _write_snapshot(led)
         return None
 
     row = {
@@ -69,16 +65,35 @@ def record(session_id: Optional[str] = None) -> Optional[dict]:
     }
     if session_id:
         row["session_id"] = session_id
+    # Append the session row FIRST, then advance the snapshot. If we crash
+    # between the two, the worst case is a recoverable double-count on the next
+    # run — never silent permanent loss of an already-written row.
     with open(_sessions_path(), "a", encoding="utf-8") as f:
         f.write(json.dumps(row) + "\n")
+    _write_snapshot(led)
     return row
+
+
+def _write_snapshot(led: dict) -> None:
+    _snapshot_path().write_text(json.dumps({
+        "total_tokens_saved": led.get("total_tokens_saved", 0),
+        "runs": led.get("runs", 0),
+        "by_kind": led.get("by_kind", {}),
+    }), encoding="utf-8")
 
 
 def read(limit: Optional[int] = None) -> List[dict]:
     p = _sessions_path()
     if not p.exists():
         return []
-    rows = [json.loads(ln) for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    rows = []
+    for ln in p.read_text(encoding="utf-8").splitlines():
+        if not ln.strip():
+            continue
+        try:
+            rows.append(json.loads(ln))
+        except json.JSONDecodeError:
+            continue  # skip a corrupt/partial line; don't fail the whole read
     return rows[-limit:] if limit else rows
 
 
