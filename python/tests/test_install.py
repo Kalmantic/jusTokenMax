@@ -106,3 +106,11 @@ def test_install_qwen(fake_home):
     inst.install("qwen")
     data = json.loads(Path(inst.config_path("qwen")).read_text())
     assert data["mcpServers"]["justokenmax"]["command"] == "npx"
+
+
+def test_install_cline(fake_home):
+    inst.install("cline")
+    p = inst.config_path("cline")
+    assert p.endswith("cline_mcp_settings.json")
+    data = json.loads(Path(p).read_text())
+    assert data["mcpServers"]["justokenmax"]["command"] == "npx"
