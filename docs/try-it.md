@@ -193,10 +193,11 @@ delta.)
 ## 5. Build-from-scratch example — a PRD you can measure
 
 Prefer a *new project from a spec*? [`examples/investment-tracker/`](../examples/investment-tracker/PRD.md)
-has a full **PRD** for a news-indexed investment tracker plus a `scaffold.sh` that
-generates the data the build consumes. Measured, one pass over those inputs:
-**597,642 → 117,395 tokens (−80%)** with jusTokenMax vs without — the PRD itself
-left untouched.
+has a full **PRD** for a news-indexed investment tracker, a `scaffold.sh` that
+generates the data the build consumes, and a **built reference app**
+([`app/`](../examples/investment-tracker/app/index.html), vanilla HTML/CSS/JS).
+Measured, one pass over those inputs: **532,789 → 117,354 tokens (−77%)** with
+jusTokenMax vs without — the PRD itself left untouched.
 
 ```bash
 bash examples/investment-tracker/scaffold.sh

@@ -304,9 +304,11 @@ via delta.)
 
 **A build-from-scratch project** — hand your agent a PRD for a news-indexed
 investment tracker and it ingests a news-feed JSON, holdings + market-history
-CSVs, a lockfile, and build logs: **597,642 → 117,395 tokens (−80%)** on the data
-it reads (the PRD itself is untouched). Full worked example with a real PRD and a
-scaffold you can run: [`examples/investment-tracker/`](examples/investment-tracker/PRD.md).
+CSVs, a lockfile, and build logs: **532,789 → 117,354 tokens (−77%)** on the data
+it reads (the PRD itself is untouched). Full worked example — a real
+[PRD](examples/investment-tracker/PRD.md), a `scaffold.sh`, and a **built
+reference app** ([`examples/investment-tracker/app/`](examples/investment-tracker/app/index.html),
+vanilla HTML/CSS/JS, no build step) you can run.
 
 Reproduce the benchmarks: `python benchmarks/benchmark.py --fetch`; reproduce the
 dev loops: [`docs/try-it.md`](docs/try-it.md) and the example above.
@@ -382,14 +384,44 @@ cd python && pip install -e . pytest pdfplumber
 pytest -q      # pdf, image, log, json, notebook, csv, diff, delta, redact, code-index, outline, optimize, cli, hook, mcp
 ```
 
+## Results — measured savings
+
+All numbers are measured (text via a real tokenizer, tiktoken `cl100k`) and
+reproducible — nothing here is hand-waved.
+
+**Single inputs** — reproduce with `python benchmarks/benchmark.py --fetch`:
+
+| Input | Reduction |
+| --- | ---: |
+| PDF → Markdown (real public PDFs) | **−56%** |
+| Verbose build / CI log | **−99%** |
+| Large JSON / API response | **−99%** |
+| Jupyter notebook | **−99%** |
+| CSV (5,000 rows) | **−99%** |
+| Locate a symbol vs read the whole file | **−97%** |
+| Image | −42% bytes |
+
+**Whole-task scenarios** — reproduce step by step in the linked docs:
+
+| Scenario | Before | After | Reduction |
+| --- | ---: | ---: | ---: |
+| [Extend an existing website codebase](docs/try-it.md) (one pass) | 259,819 | 103,745 | **−60%** |
+| [Build from scratch from a PRD — InvestWatch](examples/investment-tracker/PRD.md) (data inputs) | 532,789 | 117,354 | **−77%** |
+
+The InvestWatch example ships a **runnable reference app**
+([`examples/investment-tracker/app/`](examples/investment-tracker/app/index.html)).
+Both scenario numbers are *one pass* — in a real session they compound as the
+agent re-reads files (near-free via delta).
+
 ## Support this project
 
 jusTokenMax is free and MIT-licensed. If it keeps your agent under budget, please
 consider **[sponsoring on GitHub](https://github.com/sponsors/Kashi-KS)** — it
-funds OCR, more languages, and the cross-agent roadmap. Thank you 🙏
+funds OCR, more languages, and the roadmap. Thank you 🙏
 
 ## Roadmap
 
-OCR for scans, DOCX/PPTX/HTML inputs, deeper multi-language parsing, an OpenCode
-plugin + `justokenmax install <agent>` for one-command cross-agent setup, an MCP
-compression proxy, and a learn loop. PRs welcome.
+OCR for scanned PDFs, DOCX/PPTX/HTML inputs, even deeper multi-language parsing, a
+diff-mode lockfile path, a `learn` loop that mines sessions for durable
+corrections, and PyPI/npm publishing. (Cross-agent `install`/`uninstall`, the
+OpenCode plugin, and the MCP compression proxy are **done**.) PRs welcome.

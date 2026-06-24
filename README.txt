@@ -202,9 +202,10 @@ Delta re-read:   1 edit in 600 lines   2,407 ->  88 tokens    -96%
 Code index:      locate a symbol       16,691 -> 486 tokens    -97%  (21 lookups)
 Images:          3000x2000 -> 1568x1045   186 KB -> 107 KB     -42% bytes
 
-Real dev loop (one pass through a small website project's inputs - 8 src modules,
-a 10k-line package-lock.json, a 5,000-row CSV, a noisy build log):
-                 259,819 -> 103,745 tokens   -60%   (reproduce in docs/try-it.md)
+Whole-task scenarios (one pass; compounds on re-reads via delta):
+  Extend an existing website codebase   259,819 -> 103,745   -60%  (docs/try-it.md)
+  Build from scratch from a PRD         532,789 -> 117,354   -77%
+    (InvestWatch - examples/investment-tracker/ ; ships a runnable reference app)
 
 
 LIMITS & HONESTY

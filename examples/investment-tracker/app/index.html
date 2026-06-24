@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>InvestWatch — news-indexed investment tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>📈 InvestWatch</h1>
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search ticker or news…" />
+      <select id="sector"><option value="">All sectors</option></select>
+      <button id="theme" title="Toggle dark mode">🌙</button>
+    </div>
+  </header>
+
+  <section id="cards" class="cards"><!-- summary cards --></section>
+
+  <main>
+    <section class="panel">
+      <h2>Holdings</h2>
+      <table id="holdings">
+        <thead><tr>
+          <th data-k="ticker">Ticker</th>
+          <th data-k="shares" class="num">Shares</th>
+          <th data-k="cost" class="num">Cost basis</th>
+          <th data-k="close" class="num">Last close</th>
+          <th data-k="value" class="num">Market value</th>
+          <th data-k="pl" class="num">Unrealized P/L</th>
+          <th data-k="sector">Sector</th>
+          <th data-k="sentiment" class="num">News</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <aside class="panel">
+      <h2>Latest news</h2>
+      <ul id="news"></ul>
+    </aside>
+  </main>
+
+  <footer>
+    Static demo built from <a href="../PRD.md">PRD.md</a>. Run
+    <code>bash ../scaffold.sh</code> then serve this folder
+    (<code>python3 -m http.server</code>). Data is compressed for your agent by
+    <a href="https://github.com/Kalmantic/jusTokenMax">jusTokenMax</a>.
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

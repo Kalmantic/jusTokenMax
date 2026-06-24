@@ -4,6 +4,10 @@
 > PRD to your coding agent, point it at the scaffolded data, and let it build the
 > app — then compare the token cost **with** vs **without** jusTokenMax. See
 > [Token cost](#token-cost-with-vs-without-justokenmax) at the bottom.
+>
+> **A reference build is already in [`app/`](app/)** — a vanilla HTML/CSS/JS
+> dashboard (no build step) that implements this PRD against the scaffolded data.
+> Run `bash scaffold.sh`, then `python3 -m http.server` here and open `/app/`.
 
 ## 1. Overview
 
@@ -101,12 +105,12 @@ those inputs:
 
 | Input the agent reads | Without jusTokenMax | With jusTokenMax | Difference |
 | --- | ---: | ---: | ---: |
-| `data/news-feed.json` (800 articles) | 155,049 | 853 | **−99%** |
-| `data/holdings.csv` (3,000 rows) | 51,011 | 295 | **−99%** |
-| `data/market-history.csv` (6,000 rows) | 190,832 | 503 | **−99%** |
+| `data/news-feed.json` (800 articles) | 153,938 | 844 | **−99%** |
+| `data/holdings.csv` (60-ticker portfolio) | 2,022 | 277 | **−86%** |
+| `data/market-history.csv` (6,000 rows) | 176,079 | 489 | **−99%** |
 | `package-lock.json` (after `npm install`) | 142,226 | 115,214 | −18% |
 | `build.log` | 58,524 | 530 | **−99%** |
-| **Total (one pass)** | **597,642** | **117,395** | **−80%** |
+| **Total (one pass)** | **532,789** | **117,354** | **−77%** |
 
 And that's *one* pass — a real build re-reads these many times (every iteration,
 every "what's the schema again?"), where the gap compounds and delta re-reads are
