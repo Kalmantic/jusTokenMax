@@ -100,3 +100,9 @@ def test_install_gemini(fake_home):
     assert data["mcpServers"]["justokenmax"]["command"] == "npx"
     assert data["mcpServers"]["justokenmax"]["args"] == [
         "-y", "@kalmantic/justokenmax", "mcp"]
+
+
+def test_install_qwen(fake_home):
+    inst.install("qwen")
+    data = json.loads(Path(inst.config_path("qwen")).read_text())
+    assert data["mcpServers"]["justokenmax"]["command"] == "npx"
