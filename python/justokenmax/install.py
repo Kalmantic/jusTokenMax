@@ -60,6 +60,12 @@ _AGENTS = {
         "root": "mcpServers",
         "entry": {"command": "npx", "args": _NPX_ARGS},
     },
+    "kilocode": {
+        # Kilo Code (v7.0.33+) uses a CLI-style config with an `mcp` key.
+        "path": "~/.config/kilo/kilo.jsonc", "fmt": "json",
+        "root": "mcp",
+        "entry": {"type": "local", "command": ["npx"] + _NPX_ARGS},
+    },
 }
 AGENTS = tuple(_AGENTS)
 
