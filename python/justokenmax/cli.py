@@ -100,6 +100,16 @@ def main(argv=None) -> int:
 
     sub.add_parser("stats").add_argument("--json", action="store_true")
 
+    from .install import AGENTS
+    for verb, helptext in (("install", "register the MCP server with a coding agent"),
+                           ("uninstall", "remove the MCP server from a coding agent")):
+        sp = sub.add_parser(verb, help=helptext)
+        sp.add_argument("agent", nargs="?", choices=AGENTS,
+                        help="codex|opencode|cursor|claude (default: auto-detect)")
+        sp.add_argument("--dry-run", action="store_true",
+                        help="show what would change without writing")
+        sp.add_argument("--json", action="store_true")
+
     args = p.parse_args(argv)
 
     if args.cmd == "stats":
@@ -191,6 +201,22 @@ def main(argv=None) -> int:
         if args.json:
             print(json.dumps(results if len(results) > 1 else results[0]))
         return rc
+
+    if args.cmd in ("install", "uninstall"):
+        from . import install as inst
+        agents = [args.agent] if args.agent else inst.detect()
+        fn = inst.install if args.cmd == "install" else inst.uninstall
+        results = [fn(a, dry_run=args.dry_run) for a in agents]
+        if args.json:
+            print(json.dumps(results))
+        else:
+            tag = " (dry-run)" if args.dry_run else ""
+            for r in results:
+                print(f"{r['agent']:9} {r['status']}{tag}  ->  {r['path']}")
+            if not results:
+                print("no agents detected — specify one: "
+                      f"{', '.join(inst.AGENTS)}")
+        return 0
 
     if args.cmd == "diff":
         from .diffcompress import compress_diff

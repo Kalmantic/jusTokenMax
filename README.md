@@ -48,6 +48,29 @@ cheaper equivalent, **before** it costs you a token.
 
 ---
 
+## Built for casual users *and* enterprise — from day one
+
+The same tool serves a solo developer and a regulated enterprise, by design — not
+as an afterthought:
+
+- **Casual users** get a one-command setup (`justokenmax install`) and then it
+  just works, automatically: free, MIT, no account, no signup, sensible
+  defaults. Your agent simply gets cheaper.
+- **Enterprise** gets a tool that's safe to adopt: **zero third-party services
+  and no network calls** — nothing leaves the machine, so it runs air-gapped and
+  sidesteps data-egress / residency review; **deterministic and fully auditable**
+  (readable Python, no black-box model) for security sign-off; **built-in secret
+  redaction** (API keys/tokens masked before they ever reach context, logs, or
+  the cache); an **owner-only (0700) local cache**; **reversible** (originals
+  retained); **open-MCP-standard** integration that drops into an approved
+  toolchain; and **MIT licensing** for legal clearance.
+
+That's why it's deliberately zero-dependency and deterministic from the first
+commit — the properties enterprises require are the same ones that keep it small
+and trustworthy for everyone.
+
+---
+
 ## Comparison
 
 Inspired by headroom / caveman / codegraph, built independently. ✅ has it ·
@@ -107,8 +130,19 @@ Python package above): `npm install -g @kalmantic/justokenmax`.
 optimizes PDFs / images / logs / JSON / notebooks / CSV / diffs automatically,
 and the commands, skills, and MCP server become available.
 
-**As an MCP server (any agent — Codex CLI, OpenCode, Cursor, Cline):** point the
-client at `python -m justokenmax.mcp_server`. Example:
+**One-command setup for any agent** (seamless and reversible — idempotent,
+never clobbers your other servers, removes cleanly):
+
+```bash
+justokenmax install              # auto-detect Codex / OpenCode / Cursor / Claude and register the MCP server
+justokenmax install codex        # or target one agent
+justokenmax install --dry-run    # preview the change first
+justokenmax uninstall            # remove it again, just as cleanly
+```
+
+This writes the MCP-server entry into each agent's own config (`~/.codex/
+config.toml`, `~/.config/opencode/opencode.json`, `~/.cursor/mcp.json`, project
+`.mcp.json`). To wire it by hand instead:
 
 ```toml
 # Codex: ~/.codex/config.toml
@@ -206,6 +240,7 @@ justokenmax redact secrets.txt                      # mask secrets + elide blobs
 justokenmax index && justokenmax query parse_config # build index, find a symbol
 justokenmax retrieve <artifact>                     # get the original back (reversible)
 justokenmax stats                                   # lifetime token savings
+justokenmax install / uninstall [agent]             # register/remove the MCP server for any agent
 ```
 
 ### Plugin surface
