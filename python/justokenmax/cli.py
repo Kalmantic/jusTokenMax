@@ -99,6 +99,8 @@ def main(argv=None) -> int:
     pq.add_argument("--json", action="store_true")
 
     sub.add_parser("stats").add_argument("--json", action="store_true")
+    sub.add_parser("sessions", help="per-session savings (effectiveness over time)").add_argument("--json", action="store_true")
+    sub.add_parser("session-end", help="record the current session's savings (used by the Stop hook)").add_argument("--session-id", default=None)
     sub.add_parser("mcp", help="run the MCP server over stdio (any MCP agent)")
 
     pxy = sub.add_parser("proxy",
@@ -213,6 +215,30 @@ def main(argv=None) -> int:
         if args.json:
             print(json.dumps(results if len(results) > 1 else results[0]))
         return rc
+
+    if args.cmd == "sessions":
+        from . import sessions as sess
+        s = sess.summary()
+        if args.json:
+            print(json.dumps(s))
+        else:
+            print(f"justokenmax: {s['tokens_saved']:,} tokens saved across "
+                  f"{s['sessions']} sessions (avg {s['avg_per_session']:,}/session)")
+            for kind, n in sorted(s["by_kind"].items()):
+                print(f"  {kind:9} {n:,}")
+            if s["recent"]:
+                print("  recent:")
+                for r in s["recent"]:
+                    print(f"    {r.get('ended','?')}  -{r['tokens_saved']:,}  "
+                          f"({r['runs']} runs)")
+        return 0
+
+    if args.cmd == "session-end":
+        from . import sessions as sess
+        row = sess.record(session_id=args.session_id)
+        if row:
+            print(json.dumps(row))
+        return 0
 
     if args.cmd == "mcp":
         from .mcp_server import main as mcp_main

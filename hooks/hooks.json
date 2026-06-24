@@ -11,6 +11,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/justokenmax_session.py"]
+          }
+        ]
+      }
     ]
   }
 }
