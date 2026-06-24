@@ -190,5 +190,22 @@ delta.)
 
 ---
 
+## 5. Build-from-scratch example — a PRD you can measure
+
+Prefer a *new project from a spec*? [`examples/investment-tracker/`](../examples/investment-tracker/PRD.md)
+has a full **PRD** for a news-indexed investment tracker plus a `scaffold.sh` that
+generates the data the build consumes. Measured, one pass over those inputs:
+**597,642 → 117,395 tokens (−80%)** with jusTokenMax vs without — the PRD itself
+left untouched.
+
+```bash
+bash examples/investment-tracker/scaffold.sh
+cd examples/investment-tracker
+justokenmax optimize data/news-feed.json data/holdings.csv \
+  data/market-history.csv package-lock.json build.log
+```
+
+---
+
 That's it — the same tool, the same savings, your toggles. Liked it?
 **[Sponsor ❤](https://github.com/sponsors/Kashi-KS)**.

@@ -302,8 +302,14 @@ jusTokenMax's own source: **16,691 → 486 tokens (−97%)**. **Images** — 300
 on real files it's much larger — and every **re-read** during editing is near-free
 via delta.)
 
+**A build-from-scratch project** — hand your agent a PRD for a news-indexed
+investment tracker and it ingests a news-feed JSON, holdings + market-history
+CSVs, a lockfile, and build logs: **597,642 → 117,395 tokens (−80%)** on the data
+it reads (the PRD itself is untouched). Full worked example with a real PRD and a
+scaffold you can run: [`examples/investment-tracker/`](examples/investment-tracker/PRD.md).
+
 Reproduce the benchmarks: `python benchmarks/benchmark.py --fetch`; reproduce the
-dev loop: [`docs/try-it.md`](docs/try-it.md).
+dev loops: [`docs/try-it.md`](docs/try-it.md) and the example above.
 
 ## Use
 
