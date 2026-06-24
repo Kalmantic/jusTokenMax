@@ -125,7 +125,7 @@ via uv (`uvx justokenmax`) - zero manual setup. (With Python, `python3 -m
 justokenmax.mcp_server` also works and skips Node.)
 
 As a Claude Code plugin: inside Claude Code run
-  /plugin marketplace add Kalmantic/jusTokenMax
+  /plugin marketplace add https://github.com/Kalmantic/jusTokenMax.git
   /plugin install justokenmax@justokenmax
   /reload-plugins
 Then the Read hook + commands +

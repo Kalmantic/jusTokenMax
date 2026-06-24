@@ -77,12 +77,12 @@ Install it as a Claude Code plugin. From inside Claude Code, run these three
 slash commands:
 
 ```text
-/plugin marketplace add Kalmantic/jusTokenMax
+/plugin marketplace add https://github.com/Kalmantic/jusTokenMax.git
 /plugin install justokenmax@justokenmax
 /reload-plugins
 ```
 
-(Non-interactive equivalent: `claude plugin marketplace add Kalmantic/jusTokenMax`
+(Non-interactive equivalent: `claude plugin marketplace add https://github.com/Kalmantic/jusTokenMax.git`
 then `claude plugin install justokenmax@justokenmax`.)
 
 The plugin's hook needs the `justokenmax` CLI on your `PATH` — if you cloned and

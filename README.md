@@ -131,7 +131,7 @@ Python package above): `npm install -g @kalmantic/justokenmax`.
 **As a Claude Code plugin** — from inside Claude Code:
 
 ```text
-/plugin marketplace add Kalmantic/jusTokenMax
+/plugin marketplace add https://github.com/Kalmantic/jusTokenMax.git
 /plugin install justokenmax@justokenmax
 /reload-plugins
 ```

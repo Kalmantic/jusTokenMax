@@ -1,8 +1,11 @@
 {
   "mcpServers": {
     "justokenmax": {
-      "command": "npx",
-      "args": ["-y", "@kalmantic/justokenmax", "mcp"]
+      "command": "python3",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/python/justokenmax/mcp_server.py"],
+      "env": {
+        "PYTHONPATH": "${CLAUDE_PLUGIN_ROOT}/python"
+      }
     }
   }
 }
