@@ -113,5 +113,67 @@ justokenmax install            # auto-detects and registers the MCP server
 justokenmax uninstall          # clean removal
 ```
 
+## 6. A realistic end-to-end test — build a dashboard, then measure
+
+Want a real, repeatable measurement of token utilization? Give your agent a
+task that **reads several heavy files**, run it once with jusTokenMax **on** and
+once **off**, and compare. This is the kind of task that normally burns tokens.
+
+### Set up the inputs
+
+You already have `products.csv` and `build.log` from step 1. Add a real PDF spec
+so the PDF lever is exercised too:
+
+```bash
+curl -L -o spec.pdf https://arxiv.org/pdf/1706.03762    # any real PDF works
+```
+
+### The prompt (paste this into your agent)
+
+> **Build a product analytics dashboard, end to end.**
+>
+> 1. Read `products.csv` (5,000 rows: id, name, price, in_stock). Summarize:
+>    total products, price min/max/avg, and how many are in stock vs out.
+> 2. Read `build.log` and tell me whether the last build passed or failed —
+>    quote the exact error line(s) if any.
+> 3. Read `spec.pdf` and list, in 5 bullets, what it's about (treat it as the
+>    "requirements doc").
+> 4. Create a single-file static site `dashboard.html` (vanilla HTML/CSS/JS, no
+>    frameworks) that loads `products.csv` client-side and renders: summary cards
+>    (total products, total in-stock, average price, most-expensive product); a
+>    sortable, searchable products table; a price-range slider; and an
+>    "in-stock only" toggle. Clean, responsive, light theme.
+> 5. Write a short `dashboard-README.md` explaining how to run it and how the
+>    filters work.
+> 6. Re-read `products.csv` once more and confirm your table's column order
+>    matches the CSV header exactly.
+>
+> Read each file fully before you use it, and work step by step.
+
+This makes the agent read the CSV (twice → the **delta** lever kicks in), the
+log, and the PDF — exactly the inputs jusTokenMax compresses.
+
+### Measure it (on vs off)
+
+1. **With jusTokenMax ON** (plugin installed, or `justokenmax install`), run the
+   prompt. When it finishes, check Claude Code's context/cost with **`/cost`**
+   (or the context indicator), and run **`justokenmax stats`** — it prints the
+   tokens it saved on those reads.
+2. **Turn it OFF** and repeat on a fresh conversation:
+   ```bash
+   justokenmax config disable csv log pdf      # or uninstall the plugin
+   ```
+   Run the exact same prompt again and check **`/cost`** once more.
+3. **Compare.** The "off" run carries the raw 5,000-row CSV, the full noisy log,
+   and the page-image PDF into context; the "on" run carries digests. The
+   difference is the token utilization jusTokenMax buys you — typically the
+   inputs alone drop ~90%+. (Re-enable with `justokenmax config enable csv log
+   pdf`.)
+
+> Tip: keep the task identical and start each run from a cleared conversation
+> (`/clear`) so the only variable is jusTokenMax on vs off.
+
+---
+
 That's it — the same tool, the same savings, your toggles. Liked it?
 **[Sponsor ❤](https://github.com/sponsors/Kashi-KS)**.
