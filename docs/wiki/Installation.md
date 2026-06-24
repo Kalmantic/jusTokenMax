@@ -28,9 +28,18 @@ only Node gets the full toolset with zero manual setup.
 
 ## As a Claude Code plugin
 
-Add this repo as a plugin. The `Read` hook then optimizes PDFs / images / logs /
-JSON / notebooks / CSV / diffs automatically, and the commands, skills, and MCP
-server become available.
+From inside Claude Code:
+
+```text
+/plugin marketplace add Kalmantic/jusTokenMax
+/plugin install justokenmax@justokenmax
+/reload-plugins
+```
+
+The `Read` hook then optimizes PDFs / images / logs / JSON / notebooks / CSV /
+diffs automatically, and the commands, skills, and MCP server become available.
+The hook calls the `justokenmax` CLI, so install the Python package or have Node
+(it auto-provisions via `npx`/`uv`). Also sync the wiki page in the repo.
 
 ## For any agent (one command)
 

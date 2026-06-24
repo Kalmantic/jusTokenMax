@@ -1,0 +1,15 @@
+{
+  "name": "justokenmax",
+  "owner": {
+    "name": "Kashi & Rajan (Kalmantic)",
+    "url": "https://www.kalmantic.com"
+  },
+  "description": "jusTokenMax — token-reduction toolkit for coding agents.",
+  "plugins": [
+    {
+      "name": "justokenmax",
+      "source": "./",
+      "description": "Compress attachments, logs, JSON, notebooks, CSV, and diffs; code index + outline; secret redaction; reversible. Read hook + commands + skills + MCP server."
+    }
+  ]
+}

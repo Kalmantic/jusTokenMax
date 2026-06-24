@@ -73,12 +73,30 @@ Same with `JUSTOKENMAX_DISABLE=pdf,image justokenmax optimize ...` for a one-off
 
 ## 4. In Claude Code — it's automatic
 
-Add this repo as a Claude Code plugin (or run `justokenmax install claude`). Now
-when your agent **reads** `products.csv` / `build.log` / a PDF spec while
+Install it as a Claude Code plugin. From inside Claude Code, run these three
+slash commands:
+
+```text
+/plugin marketplace add Kalmantic/jusTokenMax
+/plugin install justokenmax@justokenmax
+/reload-plugins
+```
+
+(Non-interactive equivalent: `claude plugin marketplace add Kalmantic/jusTokenMax`
+then `claude plugin install justokenmax@justokenmax`.)
+
+The plugin's hook needs the `justokenmax` CLI on your `PATH` — if you cloned and
+`pip install ./python`'d in step 0 you're set; otherwise `pip install justokenmax`
+(or just have Node, and it auto-provisions via `npx`/`uv`).
+
+Now when your agent **reads** `products.csv` / `build.log` / a PDF spec while
 building the site, the `Read` hook transparently swaps in the cheap artifact —
 you do nothing. Turn a lever off with `justokenmax config disable <kind>` and the
 hook leaves that file untouched. Run `justokenmax stats` anytime to see the
 lifetime savings.
+
+Prefer just the tools (no auto-hook)? `justokenmax install claude` registers the
+MCP server in a project `.mcp.json` instead.
 
 ## 5. In Codex CLI / OpenCode / Cursor
 

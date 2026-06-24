@@ -124,7 +124,11 @@ which works for anyone with Node: if no Python is on PATH it auto-provisions one
 via uv (`uvx justokenmax`) - zero manual setup. (With Python, `python3 -m
 justokenmax.mcp_server` also works and skips Node.)
 
-As a Claude Code plugin: add this repo as a plugin; the Read hook + commands +
+As a Claude Code plugin: inside Claude Code run
+  /plugin marketplace add Kalmantic/jusTokenMax
+  /plugin install justokenmax@justokenmax
+  /reload-plugins
+Then the Read hook + commands +
 skills + MCP server activate automatically.
 
 
