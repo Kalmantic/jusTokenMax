@@ -25,8 +25,7 @@ def file_outline(path: str) -> Tuple[str, dict]:
         return "", {"kind": "outline", "ok": False, "note": "unsupported language"}
 
     rel = os.path.basename(path)
-    syms = (codeindex._index_python(path, rel) if lang == "python"
-            else codeindex._index_generic(path, rel, lang))
+    syms = codeindex.parse_file(path, rel, lang)
     if not syms:
         return "", {"kind": "outline", "ok": False, "note": "no symbols found"}
 

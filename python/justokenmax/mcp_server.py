@@ -57,6 +57,17 @@ TOOLS = [
         },
     },
     {
+        "name": "justokenmax_compress_diff",
+        "description": "Compress a git diff: keep real code hunks, collapse "
+                       "lockfile/generated/minified file diffs to one-line "
+                       "summaries.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+        },
+    },
+    {
         "name": "justokenmax_query",
         "description": "Look up a code symbol in the index -> file:line + "
                        "signature. Build the index first with justokenmax index.",
@@ -142,6 +153,12 @@ def _tool_compress_log(args):
     return digest
 
 
+def _tool_compress_diff(args):
+    from justokenmax.diffcompress import compress_diff
+    digest, _ = compress_diff(args["text"])
+    return digest
+
+
 def _tool_query(args):
     from justokenmax.codeindex import query, format_hits
     hits = query(args.get("root", "."), args["term"], kind=args.get("kind"))
@@ -174,6 +191,7 @@ DISPATCH = {
     "justokenmax_optimize": _tool_optimize,
     "justokenmax_compress_json": _tool_compress_json,
     "justokenmax_compress_log": _tool_compress_log,
+    "justokenmax_compress_diff": _tool_compress_diff,
     "justokenmax_query": _tool_query,
     "justokenmax_outline": _tool_outline,
     "justokenmax_delta": _tool_delta,

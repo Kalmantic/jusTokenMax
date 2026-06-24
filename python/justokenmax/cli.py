@@ -81,6 +81,11 @@ def main(argv=None) -> int:
     po.add_argument("files", nargs="+")
     po.add_argument("--json", action="store_true")
 
+    pdf_ = sub.add_parser("diff", help="compress a git diff (elide lockfile/generated noise)")
+    pdf_.add_argument("path", nargs="?", default="-",
+                      help="diff file, or '-'/omitted to read stdin")
+    pdf_.add_argument("--json", action="store_true")
+
     pi = sub.add_parser("index", help="build the code symbol index")
     pi.add_argument("path", nargs="?", default=".")
     pi.add_argument("--json", action="store_true")
@@ -185,6 +190,17 @@ def main(argv=None) -> int:
         if args.json:
             print(json.dumps(results if len(results) > 1 else results[0]))
         return rc
+
+    if args.cmd == "diff":
+        from .diffcompress import compress_diff
+        raw = (sys.stdin.read() if args.path == "-"
+               else open(args.path, encoding="utf-8", errors="replace").read())
+        digest, st = compress_diff(raw)
+        if args.json:
+            print(json.dumps({**st, "diff": digest}))
+        else:
+            sys.stdout.write(digest)
+        return 0
 
     if args.cmd == "retrieve":
         origin = cache.lookup_origin(args.artifact)

@@ -15,6 +15,7 @@ LOG_EXTS = {".log"}
 JSON_EXTS = {".json", ".ndjson"}
 NB_EXTS = {".ipynb"}
 CSV_EXTS = {".csv", ".tsv"}
+DIFF_EXTS = {".diff", ".patch"}
 # Ambiguous extensions whose kind we decide by sniffing the content.
 GENERIC_EXTS = {".txt", ".out", ".text", ""}
 
@@ -27,8 +28,11 @@ JSON_MIN_BYTES = 4 * 1024
 # Below this a CSV is small enough to read whole.
 CSV_MIN_BYTES = 4 * 1024
 
+# Below this a diff is small enough to read whole.
+DIFF_MIN_BYTES = 4 * 1024
+
 # Text kinds whose digests get a redaction pass (strip blobs, mask secrets).
-_REDACTED_KINDS = {"log", "json", "notebook", "csv"}
+_REDACTED_KINDS = {"log", "json", "notebook", "csv", "diff"}
 
 
 @dataclasses.dataclass
@@ -87,6 +91,8 @@ def _kind_for(path: str) -> str:
         return "notebook"
     if ext in CSV_EXTS:
         return "csv"
+    if ext in DIFF_EXTS:
+        return "diff"
     if ext in GENERIC_EXTS:
         return _sniff(path)
     return "skip"
@@ -233,6 +239,30 @@ def optimize(
         res = OptimizeResult(True, "csv", path, str(out), tokens_before,
                              tokens_after, cached=False,
                              note=f"{stats['rows']} rows x {stats['cols']} cols")
+
+    elif kind == "diff":
+        if os.path.getsize(path) < DIFF_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="diff already small")
+        key, out = cache.cache_paths(path, opts, ".diff")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "diff", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .diffcompress import compress_diff
+        raw = open(path, encoding="utf-8", errors="replace").read()
+        digest, stats = compress_diff(raw)
+        digest = _redact(digest)
+        out.write_text(digest, encoding="utf-8")
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after})
+        res = OptimizeResult(True, "diff", path, str(out), tokens_before,
+                             tokens_after, cached=False,
+                             note=f"{stats['files_elided']}/{stats['files_total']} "
+                                  f"files elided")
 
     else:  # image
         if os.path.getsize(path) < IMAGE_MIN_BYTES:
