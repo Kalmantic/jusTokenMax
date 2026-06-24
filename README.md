@@ -142,14 +142,22 @@ justokenmax uninstall            # remove it again, just as cleanly
 
 This writes the MCP-server entry into each agent's own config (`~/.codex/
 config.toml`, `~/.config/opencode/opencode.json`, `~/.cursor/mcp.json`, project
-`.mcp.json`). To wire it by hand instead:
+`.mcp.json`). The registered command is `npx`, which works for **anyone with
+Node — even with no Python installed**:
 
 ```toml
 # Codex: ~/.codex/config.toml
 [mcp_servers.justokenmax]
-command = "python3"
-args = ["-m", "justokenmax.mcp_server"]
+command = "npx"
+args = ["-y", "@kalmantic/justokenmax", "mcp"]
 ```
+
+**Node but no Python?** The `npx` launcher auto-provisions a runtime: if no
+Python is on `PATH` it falls back to **`uvx justokenmax`** ([uv](https://astral.sh/uv)
+fetches an ephemeral Python + the package), and bootstraps `uv` itself if
+needed. So a Claude Code user with only Node gets the full MCP toolset with zero
+manual setup. (If you do have Python, `command = "python3"`, `args = ["-m",
+"justokenmax.mcp_server"]` works too and skips Node entirely.)
 
 ---
 

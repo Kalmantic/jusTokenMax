@@ -119,6 +119,11 @@ clobbers your other servers, removes cleanly):
   justokenmax install --dry-run  # preview the change first
   justokenmax uninstall          # remove it again, just as cleanly
 
+Node but no Python? The registered command is `npx -y @kalmantic/justokenmax mcp`,
+which works for anyone with Node: if no Python is on PATH it auto-provisions one
+via uv (`uvx justokenmax`) - zero manual setup. (With Python, `python3 -m
+justokenmax.mcp_server` also works and skips Node.)
+
 As a Claude Code plugin: add this repo as a plugin; the Read hook + commands +
 skills + MCP server activate automatically.
 

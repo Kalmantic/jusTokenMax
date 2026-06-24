@@ -56,3 +56,10 @@ def test_notifications_get_no_reply():
 def test_unknown_method_errors():
     resp = mcp.handle_request({"jsonrpc": "2.0", "id": 3, "method": "bogus"})
     assert resp["error"]["code"] == -32601
+
+
+def test_cli_mcp_subcommand_runs(monkeypatch):
+    import io
+    from justokenmax.cli import main
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))   # EOF -> server exits
+    assert main(["mcp"]) == 0

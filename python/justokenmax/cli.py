@@ -99,6 +99,7 @@ def main(argv=None) -> int:
     pq.add_argument("--json", action="store_true")
 
     sub.add_parser("stats").add_argument("--json", action="store_true")
+    sub.add_parser("mcp", help="run the MCP server over stdio (any MCP agent)")
 
     from .install import AGENTS
     for verb, helptext in (("install", "register the MCP server with a coding agent"),
@@ -201,6 +202,11 @@ def main(argv=None) -> int:
         if args.json:
             print(json.dumps(results if len(results) > 1 else results[0]))
         return rc
+
+    if args.cmd == "mcp":
+        from .mcp_server import main as mcp_main
+        mcp_main()
+        return 0
 
     if args.cmd in ("install", "uninstall"):
         from . import install as inst

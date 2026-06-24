@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 /**
- * Thin Node wrapper over the jusTokenMax Python core.
+ * Thin Node wrapper over the jusTokenMax Python core — designed so a Claude Code
+ * (or any) user who has Node but NOT Python still works out of the box.
  *
- * It does no PDF/image work itself — it locates a Python interpreter and runs
- * `python -m justokenmax`, forwarding all arguments. The Python package
- * (`pip install justokenmax`) is the single source of truth for the actual
- * conversion logic.
+ * It does no PDF/image work itself; it forwards all arguments to the Python CLI
+ * and resolves a runtime in this order:
+ *   1. Repo checkout  — sibling `python/` dir (dev), run with `python3`.
+ *   2. Installed pkg  — `python3 -m justokenmax` when the module is importable.
+ *   3. No Python      — auto-provision via uv: `uvx justokenmax …` (uv fetches an
+ *                       ephemeral Python + the published package; nothing to
+ *                       pre-install). Tries to bootstrap uv if missing.
  *
- * Resolution order for the Python core:
- *   1. A sibling `python/` dir in the repo (dev / running from a clone).
- *   2. Otherwise the pip-installed `justokenmax` module on the active interpreter.
+ * Examples:
+ *   npx -y @kalmantic/justokenmax mcp        # run the MCP server (stdio)
+ *   npx -y @kalmantic/justokenmax optimize x.pdf
  */
 "use strict";
 
@@ -17,55 +21,86 @@ const { spawnSync } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 
-// Repo checkout layout: <repo>/node/bin/justokenmax.js -> <repo>/python
 const REPO_PY_DIR = path.resolve(__dirname, "..", "..", "python");
+const PKG = "justokenmax";
+const args = process.argv.slice(2);
+
+function ok(cmd, probeArgs) {
+  const r = spawnSync(cmd, probeArgs, { stdio: "ignore" });
+  return !r.error && r.status === 0;
+}
 
 function findPython() {
   for (const cmd of ["python3", "python"]) {
-    const probe = spawnSync(cmd, ["--version"], { stdio: "ignore" });
-    if (!probe.error && probe.status === 0) return cmd;
+    if (ok(cmd, ["--version"])) return cmd;
   }
   return null;
 }
 
-function main() {
-  const python = findPython();
-  if (!python) {
-    console.error(
-      "justokenmax: no Python interpreter found. Install Python 3.9+, then:\n" +
-        "  pip install justokenmax"
-    );
-    process.exit(127);
-  }
-
-  const env = { ...process.env };
-  if (fs.existsSync(path.join(REPO_PY_DIR, "justokenmax"))) {
-    // Running from a repo clone: make the local package importable.
-    env.PYTHONPATH = env.PYTHONPATH
-      ? `${REPO_PY_DIR}${path.delimiter}${env.PYTHONPATH}`
-      : REPO_PY_DIR;
-  }
-
-  // Verify the module is importable; give an actionable message if not.
-  const check = spawnSync(python, ["-c", "import justokenmax"], { env, stdio: "ignore" });
-  if (check.status !== 0) {
-    console.error(
-      "justokenmax: the Python core isn't installed. Install it with:\n" +
-        "  pip install justokenmax\n" +
-        "(plus `pip install pypdf Pillow` for PDF/image support)."
-    );
-    process.exit(127);
-  }
-
-  const res = spawnSync(python, ["-m", "justokenmax", ...process.argv.slice(2)], {
-    stdio: "inherit",
-    env,
-  });
+function run(cmd, cmdArgs, env) {
+  const res = spawnSync(cmd, cmdArgs, { stdio: "inherit", env: env || process.env });
   if (res.error) {
-    console.error(`justokenmax: failed to run Python core: ${res.error.message}`);
+    console.error(`justokenmax: failed to run ${cmd}: ${res.error.message}`);
     process.exit(1);
   }
   process.exit(res.status === null ? 1 : res.status);
+}
+
+function tryPython() {
+  const python = findPython();
+  if (!python) return false;
+
+  const env = { ...process.env };
+  const repoPkg = path.join(REPO_PY_DIR, PKG);
+  if (fs.existsSync(repoPkg)) {
+    // Dev checkout: make the local package importable, then it's always present.
+    env.PYTHONPATH = env.PYTHONPATH
+      ? `${REPO_PY_DIR}${path.delimiter}${env.PYTHONPATH}`
+      : REPO_PY_DIR;
+    run(python, ["-m", PKG, ...args], env);
+  }
+  // Installed: only use it if the module actually imports.
+  if (ok(python, ["-c", "import justokenmax"])) {
+    run(python, ["-m", PKG, ...args], env);
+  }
+  return false; // python exists but package not installed — fall through to uv
+}
+
+function tryUv() {
+  // uvx == `uv tool run`: fetches an ephemeral Python + the PyPI package.
+  if (ok("uvx", ["--version"])) run("uvx", [PKG, ...args]);
+  if (ok("uv", ["--version"])) run("uv", ["tool", "run", PKG, ...args]);
+  return false;
+}
+
+function bootstrapUv() {
+  // Best-effort: install uv via its official installer if a shell is available.
+  const isWin = process.platform === "win32";
+  const installer = isWin
+    ? ["powershell", ["-NoProfile", "-Command",
+        "irm https://astral.sh/uv/install.ps1 | iex"]]
+    : ["sh", ["-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"]];
+  console.error("justokenmax: no Python found — provisioning via uv …");
+  const r = spawnSync(installer[0], installer[1], { stdio: "inherit" });
+  return !r.error && r.status === 0;
+}
+
+function main() {
+  if (tryPython()) return;
+  if (tryUv()) return;
+  if (bootstrapUv()) {
+    // uv installs to ~/.local/bin (unix) / %USERPROFILE%\.local\bin (win); add it.
+    const home = process.env.HOME || process.env.USERPROFILE || "";
+    process.env.PATH =
+      `${path.join(home, ".local", "bin")}${path.delimiter}${process.env.PATH}`;
+    if (tryUv()) return;
+  }
+  console.error(
+    "justokenmax: could not find or provision a runtime.\n" +
+      "  Install Python 3.9+ (`pip install justokenmax`), or install uv\n" +
+      "  (https://astral.sh/uv) and re-run."
+  );
+  process.exit(127);
 }
 
 main();

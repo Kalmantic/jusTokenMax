@@ -19,7 +19,10 @@ from pathlib import Path
 from typing import List, Tuple
 
 SERVER = "justokenmax"
-_PY_ARGS = ["-m", "justokenmax.mcp_server"]
+# Registered command works for anyone with Node — `npx` runs the published
+# package's bin, which bootstraps Python (or uv) under the hood. So a Claude Code
+# user who has Node but no Python still gets the MCP server.
+_NPX_ARGS = ["-y", "@kalmantic/justokenmax", "mcp"]
 
 # agent -> how to register it
 _AGENTS = {
@@ -29,26 +32,26 @@ _AGENTS = {
     "opencode": {
         "path": "~/.config/opencode/opencode.json", "fmt": "json",
         "root": "mcp",
-        "entry": {"type": "local", "command": ["python3"] + _PY_ARGS,
+        "entry": {"type": "local", "command": ["npx"] + _NPX_ARGS,
                   "enabled": True},
     },
     "cursor": {
         "path": "~/.cursor/mcp.json", "fmt": "json",
         "root": "mcpServers",
-        "entry": {"command": "python3", "args": _PY_ARGS},
+        "entry": {"command": "npx", "args": _NPX_ARGS},
     },
     "claude": {
         "path": "./.mcp.json", "fmt": "json",
         "root": "mcpServers",
-        "entry": {"command": "python3", "args": _PY_ARGS},
+        "entry": {"command": "npx", "args": _NPX_ARGS},
     },
 }
 AGENTS = tuple(_AGENTS)
 
 _TOML_BLOCK = (
     f"[mcp_servers.{SERVER}]\n"
-    'command = "python3"\n'
-    'args = ["-m", "justokenmax.mcp_server"]\n'
+    'command = "npx"\n'
+    'args = ["-y", "@kalmantic/justokenmax", "mcp"]\n'
 )
 
 

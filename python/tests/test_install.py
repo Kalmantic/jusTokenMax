@@ -18,8 +18,9 @@ def test_install_cursor_creates_entry(fake_home):
     r = inst.install("cursor")
     assert r["changed"] and r["status"] == "installed"
     data = json.loads(Path(r["path"]).read_text())
-    assert data["mcpServers"]["justokenmax"]["command"] == "python3"
-    assert data["mcpServers"]["justokenmax"]["args"] == ["-m", "justokenmax.mcp_server"]
+    assert data["mcpServers"]["justokenmax"]["command"] == "npx"
+    assert data["mcpServers"]["justokenmax"]["args"] == [
+        "-y", "@kalmantic/justokenmax", "mcp"]
 
 
 def test_install_is_idempotent(fake_home):
@@ -60,8 +61,9 @@ def test_uninstall_absent_is_noop(fake_home):
 
 def test_opencode_uses_local_type(fake_home):
     inst.install("opencode")
-    data = json.loads(Path(inst.config_path("opencode")).read_text())
-    assert data["mcp"]["justokenmax"]["type"] == "local"
+    entry = json.loads(Path(inst.config_path("opencode")).read_text())["mcp"]["justokenmax"]
+    assert entry["type"] == "local"
+    assert entry["command"] == ["npx", "-y", "@kalmantic/justokenmax", "mcp"]
 
 
 # ---------------- TOML agent (codex) ----------------
