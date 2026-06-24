@@ -159,6 +159,9 @@ needed. So a Claude Code user with only Node gets the full MCP toolset with zero
 manual setup. (If you do have Python, `command = "python3"`, `args = ["-m",
 "justokenmax.mcp_server"]` works too and skips Node entirely.)
 
+**OpenCode** also has a transparent read-compression plugin (mirrors the Claude
+Code hook) — see [`integrations/opencode/`](integrations/opencode/).
+
 ---
 
 ## The levers
