@@ -45,6 +45,11 @@ _AGENTS = {
         "root": "mcpServers",
         "entry": {"command": "npx", "args": _NPX_ARGS},
     },
+    "gemini": {
+        "path": "~/.gemini/settings.json", "fmt": "json",
+        "root": "mcpServers",
+        "entry": {"command": "npx", "args": _NPX_ARGS},
+    },
 }
 AGENTS = tuple(_AGENTS)
 

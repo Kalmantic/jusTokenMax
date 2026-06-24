@@ -92,3 +92,11 @@ def test_dry_run_writes_nothing(fake_home):
 
 def test_detect_includes_claude(fake_home):
     assert "claude" in inst.detect()
+
+
+def test_install_gemini(fake_home):
+    inst.install("gemini")
+    data = json.loads(Path(inst.config_path("gemini")).read_text())
+    assert data["mcpServers"]["justokenmax"]["command"] == "npx"
+    assert data["mcpServers"]["justokenmax"]["args"] == [
+        "-y", "@kalmantic/justokenmax", "mcp"]
