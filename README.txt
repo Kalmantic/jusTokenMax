@@ -140,6 +140,17 @@ USE
   justokenmax outline src/app.py                 # a file's shape, no bodies
   justokenmax retrieve <artifact>                # get the original back (reversible)
   justokenmax stats                              # lifetime token savings
+  justokenmax config disable csv                 # turn a lever off (your way)
+  justokenmax proxy -- npx -y some-mcp-server     # compress ANY other MCP server
+
+New here? docs/try-it.md is a 5-minute copy-paste walkthrough (savings on vs off).
+
+Configure - optimize your way (every lever on by default):
+  justokenmax config                 # show what's on/off
+  justokenmax config disable pdf     # persist: skip PDFs
+  justokenmax config enable pdf      # back on
+  JUSTOKENMAX_DISABLE=pdf,image ...  # one-off, via env
+  Kinds: pdf image log json notebook csv diff redact
 
 Plugin surface:
   Hook     PreToolUse(Read) rewrites PDF/image/.log/JSON/.ipynb/CSV/diff reads
@@ -171,6 +182,10 @@ Images:          3000x2000 -> 1568x1045   186 KB -> 107 KB     -42% bytes
 
 LIMITS & HONESTY
 ------------------------------------------------------------------------------
+- Why text, not image parsing? Almost every spec/design/test doc is born digital
+  with a real text layer, and text is ~10x cheaper than a page-image (and
+  searchable/diffable) - so text-first is the right default. Scanned/image-only
+  PDFs are the exception (OCR is on the roadmap); or `config disable pdf`.
 - No OCR: scanned/image-only PDFs -> empty Markdown; original passed through.
 - PDF per-page tokens are a conservative model, not a billed number.
 - Image token savings are base64-pipeline only; the always-real win is bytes.

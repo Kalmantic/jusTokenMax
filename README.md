@@ -91,7 +91,9 @@ Inspired by headroom / caveman / codegraph, built independently. ✅ has it ·
 | Reversible + retrieve original | ✅ | ✅ | ❌ | ❌ |
 | Transparent in-place Read rewrite | ✅ | ❌ | ❌ | ⚠️ |
 | Content sniffer / auto-route | ✅ | ✅ | ❌ | ❌ |
-| MCP server (any agent) | ✅ | ✅ | ⚠️ | ✅ |
+| MCP server + one-command install | ✅ | ⚠️ | ⚠️ | ⚠️ |
+| **MCP compression proxy (any server)** | ✅ | ✅ | ❌ | ❌ |
+| **Per-lever on/off config** | ✅ | ⚠️ | ⚠️ | ❌ |
 | HTTP proxy / wrap / middleware | ❌ | ✅ | ❌ | ❌ |
 | Trained compression model | ❌ | ✅ | ❌ | ❌ |
 | Cross-agent shared memory | ❌ | ✅ | ❌ | ❌ |
@@ -194,6 +196,14 @@ text to clean Markdown and **drops the image channel** — you keep the words,
 stop paying for the picture, and gain something searchable and quotable. Images
 are downscaled to the model's resolution ceiling and recompressed.
 
+*Why text, not image parsing?* Almost every spec, design doc, README, and test
+document an agent reads is **born digital with a real text layer** — and text is
+~10× cheaper than a page-image, plus searchable, quotable, and diffable. So
+text-first extraction is the right default; the only case it can't serve is a
+**scanned/image-only** PDF (no text layer), which is exactly where OCR comes in
+(on the roadmap). And if you'd rather it never touch PDFs, `justokenmax config
+disable pdf`.
+
 **Logs.** Build/test/CI output is mostly noise: ANSI codes, progress spam, the
 same line hundreds of times, 50-frame stack traces. jusTokenMax digests it —
 strips colour, collapses repeated lines into `(×N)`, folds long traces to
@@ -252,7 +262,27 @@ justokenmax index && justokenmax query parse_config # build index, find a symbol
 justokenmax retrieve <artifact>                     # get the original back (reversible)
 justokenmax stats                                   # lifetime token savings
 justokenmax install / uninstall [agent]             # register/remove the MCP server for any agent
+justokenmax config disable csv                      # turn a lever off (your project, your way)
+justokenmax proxy -- npx -y some-mcp-server         # compress ANY other MCP server's output
 ```
+
+New here? **[`docs/try-it.md`](docs/try-it.md)** is a 5-minute, copy-paste
+walkthrough that shows the savings with a lever on vs off.
+
+### Configure — optimize your way
+
+Every lever is on by default; turn any of them off when a project needs the raw
+file:
+
+```bash
+justokenmax config                    # show what's on/off
+justokenmax config disable pdf        # persist: skip PDFs from now on
+justokenmax config enable pdf         # back on
+JUSTOKENMAX_DISABLE=pdf,image justokenmax optimize x.pdf   # one-off, via env
+```
+
+Kinds: `pdf image log json notebook csv diff redact`. A disabled kind is skipped
+by `optimize()` and left untouched by the Read hook.
 
 ### Plugin surface
 
