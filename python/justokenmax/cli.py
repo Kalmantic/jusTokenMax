@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 from . import __version__, cache
 from .optimize import optimize
@@ -157,7 +158,7 @@ def main(argv=None) -> int:
         from .redact import redact
         results = []
         for f in args.files:
-            raw = open(f, encoding="utf-8", errors="replace").read()
+            raw = Path(f).read_text(encoding="utf-8", errors="replace")
             clean, st = redact(raw)
             key, out = cache.cache_paths(f, {"kind": "redact"}, ".redacted.txt")
             out.write_text(clean, encoding="utf-8")
@@ -194,7 +195,7 @@ def main(argv=None) -> int:
     if args.cmd == "diff":
         from .diffcompress import compress_diff
         raw = (sys.stdin.read() if args.path == "-"
-               else open(args.path, encoding="utf-8", errors="replace").read())
+               else Path(args.path).read_text(encoding="utf-8", errors="replace"))
         digest, st = compress_diff(raw)
         if args.json:
             print(json.dumps({**st, "diff": digest}))

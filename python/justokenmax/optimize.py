@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+from pathlib import Path
 from typing import Optional
 
 from . import cache
@@ -30,9 +31,6 @@ CSV_MIN_BYTES = 4 * 1024
 
 # Below this a diff is small enough to read whole.
 DIFF_MIN_BYTES = 4 * 1024
-
-# Text kinds whose digests get a redaction pass (strip blobs, mask secrets).
-_REDACTED_KINDS = {"log", "json", "notebook", "csv", "diff"}
 
 
 @dataclasses.dataclass
@@ -65,7 +63,8 @@ def _redact(text: str) -> str:
 def _sniff(path: str) -> str:
     """Decide kind by content for ambiguous extensions (.txt/.out/no ext)."""
     try:
-        head = open(path, encoding="utf-8", errors="replace").read(65536)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            head = fh.read(65536)
     except OSError:
         return "skip"
     from .jsoncompress import looks_like_json
@@ -149,7 +148,7 @@ def optimize(
                                   meta["tokens_before"], meta["tokens_after"],
                                   cached=True, note="cache hit")
         from .logs import compress_log
-        raw = open(path, encoding="utf-8", errors="replace").read()
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_log(raw)
         digest = _redact(digest)
         out.write_text(digest, encoding="utf-8")
@@ -174,7 +173,7 @@ def optimize(
                                   meta["tokens_before"], meta["tokens_after"],
                                   cached=True, note="cache hit")
         from .jsoncompress import compress_json
-        raw = open(path, encoding="utf-8", errors="replace").read()
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_json(raw)
         if not stats.get("ok"):
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
@@ -198,7 +197,7 @@ def optimize(
                                   meta["tokens_before"], meta["tokens_after"],
                                   cached=True, note="cache hit")
         from .notebook import notebook_to_markdown
-        raw = open(path, encoding="utf-8", errors="replace").read()
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = notebook_to_markdown(raw)
         if not stats.get("ok"):
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
@@ -225,7 +224,7 @@ def optimize(
                                   meta["tokens_before"], meta["tokens_after"],
                                   cached=True, note="cache hit")
         from .csvtable import compress_csv
-        raw = open(path, encoding="utf-8", errors="replace").read()
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_csv(raw)
         if not stats.get("ok"):
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
@@ -251,7 +250,7 @@ def optimize(
                                   meta["tokens_before"], meta["tokens_after"],
                                   cached=True, note="cache hit")
         from .diffcompress import compress_diff
-        raw = open(path, encoding="utf-8", errors="replace").read()
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_diff(raw)
         digest = _redact(digest)
         out.write_text(digest, encoding="utf-8")

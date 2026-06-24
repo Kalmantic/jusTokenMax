@@ -22,6 +22,7 @@ import ast
 import json
 import os
 import re
+from pathlib import Path
 from typing import List, Optional
 
 INDEX_DIRNAME = ".justokenmax"
@@ -108,7 +109,7 @@ def _py_decorators(node) -> str:
 
 def _index_python(path: str, rel: str) -> List[dict]:
     try:
-        tree = ast.parse(open(path, encoding="utf-8", errors="replace").read())
+        tree = ast.parse(Path(path).read_text(encoding="utf-8", errors="replace"))
     except (SyntaxError, ValueError):
         return []
     out: List[dict] = []
@@ -178,7 +179,7 @@ _JS_METHOD = re.compile(
 
 def _index_js(path: str, rel: str, lang: str) -> List[dict]:
     try:
-        lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+        lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return []
     out: List[dict] = []
@@ -279,7 +280,7 @@ _JAVA_FIELD = re.compile(
 
 def _index_java(path: str, rel: str) -> List[dict]:
     try:
-        lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+        lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return []
     out: List[dict] = []
@@ -370,7 +371,7 @@ def _index_generic(path: str, rel: str, lang: str) -> List[dict]:
         return []
     out = []
     try:
-        lines = open(path, encoding="utf-8", errors="replace").read().splitlines()
+        lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return []
     for i, line in enumerate(lines, 1):
@@ -420,7 +421,7 @@ def build_index(root: str) -> dict:
 def load_index(root: str) -> Optional[dict]:
     p = os.path.join(os.path.abspath(root), INDEX_DIRNAME, INDEX_FILE)
     if os.path.exists(p):
-        return json.load(open(p, encoding="utf-8"))
+        return json.loads(Path(p).read_text(encoding="utf-8"))
     return None
 
 

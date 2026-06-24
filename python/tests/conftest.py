@@ -24,7 +24,7 @@ def _build_text_pdf(path: str, lines):
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+        + b"/Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
         b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n"
         + content + b"\nendstream",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",

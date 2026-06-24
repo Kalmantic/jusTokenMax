@@ -59,7 +59,7 @@ def record_savings(tokens_saved: int, kind: str) -> dict:
         try:
             data = json.loads(LEDGER.read_text())
         except json.JSONDecodeError:
-            pass
+            data = {"total_tokens_saved": 0, "runs": 0, "by_kind": {}}
     data["total_tokens_saved"] = data.get("total_tokens_saved", 0) + tokens_saved
     data["runs"] = data.get("runs", 0) + 1
     data.setdefault("by_kind", {})
@@ -73,7 +73,7 @@ def read_ledger() -> dict:
         try:
             return json.loads(LEDGER.read_text())
         except json.JSONDecodeError:
-            pass
+            return {"total_tokens_saved": 0, "runs": 0, "by_kind": {}}
     return {"total_tokens_saved": 0, "runs": 0, "by_kind": {}}
 
 
@@ -85,7 +85,7 @@ def _load_origins() -> dict:
         try:
             return json.loads(ORIGINS.read_text())
         except json.JSONDecodeError:
-            pass
+            return {}
     return {}
 
 

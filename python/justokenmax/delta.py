@@ -14,6 +14,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import os
+from pathlib import Path
 from typing import Tuple
 
 from . import cache
@@ -33,7 +34,7 @@ def _snap_path(path: str):
 def delta(path: str) -> Tuple[str, dict]:
     """Return (artifact, stats). artifact is the full file on first read, else a
     unified diff (or a 'no changes' note)."""
-    current = open(path, encoding="utf-8", errors="replace").read()
+    current = Path(path).read_text(encoding="utf-8", errors="replace")
     snap = _snap_path(path)
 
     if snap.exists():

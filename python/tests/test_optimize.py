@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from justokenmax import cache
 from justokenmax.optimize import optimize
@@ -10,7 +11,7 @@ def test_pdf_dispatch_produces_markdown(text_pdf):
     assert res.output.endswith(".md")
     assert os.path.exists(res.output)
     assert res.tokens_saved > 0
-    assert "Hello jusTokenMax" in open(res.output, encoding="utf-8").read()
+    assert "Hello jusTokenMax" in Path(res.output).read_text(encoding="utf-8")
 
 
 def test_pdf_second_run_is_cache_hit(text_pdf):
@@ -33,7 +34,7 @@ def test_log_dispatch_compresses(big_log):
     assert res.ok and res.kind == "log"
     assert res.output.endswith(".log.txt")
     assert res.tokens_saved > 0
-    digest = open(res.output, encoding="utf-8").read()
+    digest = Path(res.output).read_text(encoding="utf-8")
     assert "Build FAILED" in digest          # important line preserved
 
 
@@ -48,7 +49,7 @@ def test_notebook_dispatch_elides_images(big_notebook):
     assert res.ok and res.kind == "notebook"
     assert res.output.endswith(".ipynb.md")
     assert res.tokens_saved > 0
-    digest = open(res.output, encoding="utf-8").read()
+    digest = Path(res.output).read_text(encoding="utf-8")
     assert "[image output elided]" in digest
     assert "P" * 1000 not in digest
 
@@ -58,13 +59,13 @@ def test_csv_dispatch_samples(big_csv):
     assert res.ok and res.kind == "csv"
     assert res.output.endswith(".csv.md")
     assert res.tokens_saved > 0
-    digest = open(res.output, encoding="utf-8").read()
+    digest = Path(res.output).read_text(encoding="utf-8")
     assert "2000 rows" in digest
 
 
 def test_log_digest_redacts_secret(big_log):
     res = optimize(big_log)
-    digest = open(res.output, encoding="utf-8").read()
+    digest = Path(res.output).read_text(encoding="utf-8")
     # The unmasked secret was "sk-" + 22 L's; after redaction that long run is
     # broken up, so the contiguous run must not survive in the digest.
     assert "L" * 22 not in digest
