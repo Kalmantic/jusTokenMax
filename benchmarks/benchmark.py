@@ -25,6 +25,7 @@ import os
 import subprocess
 import sys
 import textwrap
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -267,7 +268,7 @@ def bench_logs():
             f.write(_representative_log())
         paths = [p]
     for path in paths:
-        raw = open(path, encoding="utf-8", errors="replace").read()
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, st = compress_log(raw)
         tb, _ = count_text_tokens(raw)
         ta, _ = count_text_tokens(digest)
@@ -303,7 +304,7 @@ def bench_json():
             f.write(_representative_json())
         paths = [p]
     for path in paths:
-        raw = open(path, encoding="utf-8", errors="replace").read()
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, st = compress_json(raw)
         if not st.get("ok"):
             continue
@@ -331,8 +332,8 @@ def bench_index():
             picks.append(s)
     file_tok_sum = hit_tok_sum = 0
     for s in picks:
-        full = open(os.path.join(root, s["file"]), encoding="utf-8",
-                    errors="replace").read()
+        full = Path(os.path.join(root, s["file"])).read_text(
+            encoding="utf-8", errors="replace")
         file_tok_sum += count_text_tokens(full)[0]
         hit_tok_sum += count_text_tokens(codeindex.format_hits([s]))[0]
     pct = 100 * (file_tok_sum - hit_tok_sum) // file_tok_sum if file_tok_sum else 0

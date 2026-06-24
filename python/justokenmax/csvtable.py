@@ -22,6 +22,22 @@ def _sniff_delim(sample: str) -> str:
         return "\t" if "\t" in first else ","
 
 
+def _looks_int(v: str) -> bool:
+    try:
+        int(v)
+    except ValueError:
+        return False
+    return True
+
+
+def _looks_float(v: str) -> bool:
+    try:
+        float(v)
+    except ValueError:
+        return False
+    return True
+
+
 def _infer_type(values: List[str]) -> str:
     seen = set()
     for v in values:
@@ -31,18 +47,12 @@ def _infer_type(values: List[str]) -> str:
         if v.lower() in ("true", "false"):
             seen.add("bool")
             continue
-        try:
-            int(v)
+        if _looks_int(v):
             seen.add("int")
             continue
-        except ValueError:
-            pass
-        try:
-            float(v)
+        if _looks_float(v):
             seen.add("float")
             continue
-        except ValueError:
-            pass
         seen.add("str")
     if not seen:
         return "empty"

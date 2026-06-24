@@ -42,10 +42,10 @@ _Image note: native-vision models downscale to <=1568px anyway, so the byte savi
 
 ## Code index (read symbols, not files)
 
-Indexed **161 symbols** across **29 files**. Cost to locate a symbol, summed over 29 lookups:
+Indexed **263 symbols** across **34 files**. Cost to locate a symbol, summed over 34 lookups:
 
 | approach | tokens |
 | --- | ---: |
-| read each whole file | 22,652 |
-| one `justokenmax query` hit each | 638 |
+| read each whole file | 29,945 |
+| one `justokenmax query` hit each | 854 |
 | **reduction** | **-97%** |
