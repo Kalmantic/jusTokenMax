@@ -1,197 +1,57 @@
 # jusTokenMax
 
-**A token-reduction toolkit for coding agents, packaged as a Claude Code
-plugin.** It attacks every avoidable corner of the token budget — the
-attachments you feed in, the logs you paste, the files you read, and the
-sub-tasks that bloat the thread — and shrinks each one before it costs you.
-
-Ships as a **Python library + `justokenmax` CLI** that does the work, and a **Claude
-Code plugin** (hooks, commands, skills) that runs it automatically.
+**Keep your coding agent under a token (and cost) budget.** jusTokenMax shrinks
+every expensive thing before it reaches the model's context — attachments, logs,
+JSON, notebooks, CSVs, diffs, and the files you read — so the same work costs a
+fraction of the tokens.
 
 > Built by **Kashi** ([linkedin](https://www.linkedin.com/in/kashiks/)) and
 > **Rajan** ([linkedin](https://www.linkedin.com/in/thiyagarajan/)), founders of
 > [Kalmantic](https://www.kalmantic.com) — [jusCode.co](https://juscode.co).
-> MIT licensed. Public repo — contributions and better benchmarks welcome.
+> MIT licensed.
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-db61a2?logo=githubsponsors)](https://github.com/sponsors/Kashi-KS)
 
-## Support this project
-
-jusTokenMax is free and MIT-licensed. If it saves you tokens (and money), please
-consider **[sponsoring on GitHub](https://github.com/sponsors/Kashi-KS)** — it
-funds the time to add OCR, more languages, and the remaining roadmap. Thank you 🙏
-
 ---
 
-## The levers
+## TokenMax under a budget
 
-| Module | Reduces | How | Measured |
-| --- | --- | --- | --- |
-| **Attachments** | PDFs & images you read | PDF → page-delimited Markdown (drops the per-page image channel); images downscaled ≤1568px + recompressed | **−56%** on real PDFs |
-| **Logs** | verbose build/test/CI output | strip ANSI, collapse repeats (`×N`), fold stack traces, keep errors/warnings + head/tail | **−99%** |
-| **JSON / tool output** | big structured payloads | sample long arrays, truncate long strings, cap depth, minify whitespace | **−99%** |
-| **Notebooks** | `.ipynb` files | drop base64 image outputs, truncate cell outputs, keep code + markdown | **−99%** |
-| **CSV / tabular** | large tables | header + inferred column types + sample rows + row count | **−99%** |
-| **Delta reads** | re-reading the same file | return only the diff since the last read, not the whole file | **−96%** |
-| **Redaction** | secrets & blobs in text | mask API keys/tokens/passwords, elide base64/data-URIs (tokens **+** safety) | safety + tokens |
-| **Code index** | reading whole files to find code | symbol map (`file:line` + signature) so you read only the relevant range | **−97%** to locate a symbol |
-| **Terse output** | tokens the agent *writes* | output-style steering: lead with answer, fragments, no filler — facts kept exact | output-side |
-| **Chat branching** | sub-tasks that bloat the thread | offload heavy work to an isolated subagent context, merge back only a digest | workflow skill |
-| **Cache alignment** | recompute on long sessions | keep the prompt prefix stable so the provider KV cache keeps hitting | guidance |
+Coding-agent bills are driven by **input tokens** — the PDFs, logs, API
+responses, diffs, and source files that pile into the context window. jusTokenMax
+caps that: it intercepts each heavy input and replaces it with a faithful, far
+cheaper equivalent, **before** it costs you a token.
 
-All compression is **reversible** — originals are cached by content hash and
-`justokenmax retrieve <artifact>` hands the full version back — and tracked in a
-lifetime ledger (`justokenmax stats`). A content **sniffer** routes generic files
-(`.txt`/`.out`/no-extension) to the right compressor automatically.
+- **Compress everything that bloats context** — PDFs → Markdown, images
+  downscaled, logs/JSON/notebooks/CSVs/diffs digested, whole-file reads replaced
+  by symbol lookups. Typical reductions **56%–99%** (measured, below).
+- **Stay under a budget** — point it at the things you feed your agent and the
+  per-task token cost drops by roughly the same amounts; pair with `terse`
+  output and `chat-branch` to also cap what the agent *writes* and *re-reads*.
+- **Reversible & safe** — every original is cached by content hash
+  (`justokenmax retrieve` brings it back); secrets and base64 blobs are masked on
+  the way through.
+- **Works where you work** — **automatic** in Claude Code (a `Read` hook swaps
+  heavy files for cheap artifacts in place), and available to **any MCP agent**
+  (Codex CLI, OpenCode, Cursor, …) plus a plain `justokenmax` CLI.
+- **Zero dependencies, fully auditable** — deterministic heuristics, no trained
+  model, no network. Every transform is readable Python.
 
----
-
-## How each lever works
-
-**Attachments.** A PDF is billed as *text + a rendered page-image* (~1,500
-tokens/page after the API clamps a page to ≤1.15MP). jusTokenMax extracts the
-text to clean Markdown and **drops the image channel** — you keep the words,
-stop paying for the picture, and gain something searchable and quotable. Images
-are downscaled to the model's resolution ceiling and recompressed (the always-
-real win is bytes; the token win lands in base64-inline pipelines).
-
-**Logs.** Build/test/CI output is mostly noise: ANSI codes, progress spam, the
-same line hundreds of times, 50-frame stack traces. jusTokenMax digests it —
-strips colour, collapses repeated lines into `(×N)`, folds long traces to
-first+last frame, and always keeps error/warning lines plus the head and tail.
-
-**Code index.** Reading entire files to find one function is the biggest
-avoidable input cost. jusTokenMax parses the repo (Python via `ast`; JS/TS/Go/
-Rust/Java/Ruby/C++ via regex) into a symbol map, so `justokenmax query parse_config`
-returns `file:line` + signature in a few tokens and you read only that range.
-
-**Chat branching.** Every file read stays in context for the rest of the
-session. Branching runs a self-contained sub-task in a subagent whose context is
-discarded afterward, returning only a compact digest — the main thread grows by
-a paragraph instead of tens of thousands of tokens.
-
----
-
-## Results
-
-Measured by [`benchmarks/benchmark.py`](benchmarks/benchmark.py). Text is counted
-with a real tokenizer (tiktoken / `cl100k`); the PDF "before" uses the page-image
-model above at a conservative ~1,500 tokens/page. Full detail (regenerable) in
-[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
-
-**PDF → Markdown** (real public PDFs)
-
-| Document | Pages | Before | After | Reduction |
-| --- | ---: | ---: | ---: | ---: |
-| *Attention Is All You Need* (arXiv 1706.03762) | 15 | 37,074 | 14,574 | **−60%** |
-| IRS Form W-9 | 6 | 18,305 | 9,305 | **−49%** |
-| **Total** | 21 | **55,379** | **23,879** | **−56%** |
-
-**Logs**
-
-| Input | Lines | Tokens before | Tokens after | Reduction |
-| --- | ---: | ---: | ---: | ---: |
-| representative build log | 4,345 → 21 | 107,668 | 396 | **−99%** |
-
-**JSON / structured output**
-
-| Input | Tokens before | Tokens after | Reduction |
-| --- | ---: | ---: | ---: |
-| representative API response (2,000-row payload) | 168,023 | 374 | **−99%** |
-
-**Notebook · CSV · delta**
-
-| Input | Tokens before | Tokens after | Reduction |
-| --- | ---: | ---: | ---: |
-| notebook, 20 cells w/ image outputs | 401,170 | 610 | **−99%** |
-| CSV, 5,000 rows | 57,340 | 237 | **−99%** |
-| delta re-read, 1 edit in 600 lines | 2,407 | 88 | **−96%** |
-
-**Code index** — cost to locate a symbol, summed over 21 lookups in jusTokenMax's
-own source (123 symbols / 21 files):
-
-| Approach | Tokens |
+| What you feed it | Typical reduction |
 | --- | ---: |
-| read each whole file | 16,691 |
-| one `justokenmax query` hit each | 486 |
-| **reduction** | **−97%** |
-
-**Images** — 3000×2000 → 1568×1045, 186 KB → 107 KB (**−42% bytes**).
-
-Reproduce: `python benchmarks/benchmark.py --fetch`. Numbers vary with content;
-drop your own files into `benchmarks/fixtures/`.
+| PDF spec / paper | **−56%** (real PDFs) |
+| Verbose build/CI log | **−99%** |
+| Large JSON / API response | **−99%** |
+| Jupyter notebook | **−99%** |
+| CSV (thousands of rows) | **−99%** |
+| Git diff (lockfile churn) | lockfile → 1 line |
+| Finding a symbol vs reading the file | **−97%** |
 
 ---
 
-## Install
+## Comparison
 
-The canonical install is the Python package; it provides the `justokenmax` CLI.
-
-**From this repo (works today — Python 3.9+):**
-
-```bash
-git clone https://github.com/jusCode-Co/jusTokenMax && cd jusTokenMax
-pip install pypdf Pillow            # required codecs
-pip install pdfplumber              # optional: better PDF table extraction
-pip install ./python                # installs the `justokenmax` CLI (pip dist: justokenmax)
-justokenmax --version
-```
-
-**From PyPI** (once published): `pip install justokenmax`.
-
-**npm** (optional thin shim — runs `python -m justokenmax`, so it still needs the
-Python package above): `npm install -g @kalmantic/justokenmax`.
-
-**As a Claude Code plugin:** add this repo as a plugin. The `Read` hook then
-optimizes PDFs / images / logs / JSON / notebooks / CSV automatically, and the
-commands, skills, and MCP server become available. The hook calls
-`python3 -m justokenmax`, so the Python package must be installed.
-
-## Use
-
-```bash
-justokenmax optimize report.pdf shot.png build.log api.json data.csv nb.ipynb  # by type
-justokenmax logs ci-output.log                      # compress a verbose log
-justokenmax json response.json                      # compress a JSON payload
-justokenmax delta src/app.py                        # only what changed since last read
-justokenmax redact secrets.txt                      # mask secrets + elide blobs
-justokenmax index && justokenmax query parse_config      # build index, find a symbol
-justokenmax retrieve <artifact>                     # get the original back (reversible)
-justokenmax stats                                   # lifetime token savings
-```
-
-### Plugin surface
-
-- **Hook:** `PreToolUse(Read)` transparently rewrites a `Read` of a PDF / image /
-  `.log` / JSON / `.ipynb` / CSV to the cheap artifact via `updatedInput`. It
-  **never blocks a Read** — any failure falls through untouched.
-- **MCP server:** `.mcp.json` launches a stdlib stdio server exposing
-  `justokenmax_optimize`, `justokenmax_compress_json`, `justokenmax_compress_log`,
-  `justokenmax_query`, `justokenmax_delta`, `justokenmax_redact`, `justokenmax_retrieve`,
-  `justokenmax_stats` — so **any** MCP-capable agent can call the compressors.
-- **Commands:** `/justokenmax:optimize`, `/justokenmax:logs`, `/justokenmax:index`,
-  `/justokenmax:query`, `/justokenmax:delta`, `/justokenmax:redact`, `/justokenmax:retrieve`,
-  `/justokenmax:terse`, `/justokenmax:branch`, `/justokenmax:compress-memory`, `/justokenmax:learn`,
-  `/justokenmax:stats`.
-- **Skills:** `attachments` (PDF/image/log), `code-index` (query-first
-  navigation), `chat-branch` (offload sub-tasks), `terse-output` (cut written
-  tokens), `cache-align` (keep the prompt cache warm).
-
-```
-.claude-plugin/plugin.json   plugin manifest
-.mcp.json                    MCP server config (provider-agnostic access)
-hooks/                       PreToolUse(Read) hook + config
-commands/                    slash commands
-skills/                      justokenmax, code-index, chat-branch, terse-output, cache-align
-python/                      core library + CLI + MCP server + 57-test suite
-node/                        thin npm wrapper over the Python core
-benchmarks/                  benchmark harness + RESULTS.md
-```
-
-## Relation to headroom / caveman / codegraph
-
-jusTokenMax is inspired by these but built independently. ✅ has it · ⚠️ partial ·
-❌ no.
+Inspired by headroom / caveman / codegraph, built independently. ✅ has it ·
+⚠️ partial · ❌ no.
 
 | Capability | jusTokenMax | headroom | caveman | codegraph |
 |---|:--:|:--:|:--:|:--:|
@@ -199,9 +59,10 @@ jusTokenMax is inspired by these but built independently. ✅ has it · ⚠️ p
 | Image / log / JSON compression | ✅ | ✅ | ❌ | ❌ |
 | **Notebook (.ipynb) compression** | ✅ | ❌ | ❌ | ❌ |
 | **CSV / tabular sampling** | ✅ | ❌ | ❌ | ❌ |
+| **Git-diff compression** | ✅ | ❌ | ❌ | ❌ |
 | **Delta / incremental re-reads** | ✅ | ❌ | ❌ | ❌ |
 | **Secret + base64-blob redaction** | ✅ | ❌ | ❌ | ❌ |
-| Code symbol index (read symbols not files) | ⚠️ | ❌ | ❌ | ✅ |
+| Code symbol index + outline | ✅ | ❌ | ❌ | ✅ |
 | Output-token reduction (terse) | ✅ | ✅ | ✅ | ❌ |
 | Chat branching → subagent + digest | ✅ | ⚠️ | ❌ | ❌ |
 | Reversible + retrieve original | ✅ | ✅ | ❌ | ❌ |
@@ -214,51 +75,183 @@ jusTokenMax is inspired by these but built independently. ✅ has it · ⚠️ p
 | Zero-dependency / auditable | ✅ | ❌ | ✅ | ⚠️ |
 | **Single unified plugin (all levers)** | ✅ | ⚠️ | ❌ | ❌ |
 
-What it **shares**: local-first reversible compression, a stats ledger, terse
-output (caveman), MCP access (headroom). What's **distinct to jusTokenMax**:
+What's **distinct to jusTokenMax**: a Claude-Code-native transparent rewrite
+(`updatedInput`, no proxy), a queryable code symbol index **+ file outline**, PDF
+→ Markdown that eliminates the per-page image channel, chat-branching as a
+first-class command, and fully transparent zero-dependency heuristics. What
+headroom still has that we don't: a trained model, an HTTP proxy mode, and a
+cross-agent shared-memory store.
 
-- **Claude-Code-native transparent rewrite.** The `Read` hook swaps a heavy file
-  for its cheap artifact *in place* via `updatedInput`, mid-tool-call — the agent
-  reads what it asked for, cheaper, with no proxy and no workflow change.
-- **A queryable code symbol index** (codegraph-style): `justokenmax query` returns
-  `file:line` + signature so you avoid reading whole files — a different lever
-  than compressing code *content*.
-- **PDF → Markdown** that eliminates the per-page image channel (not just image
-  recompression).
-- **Chat-branching as a first-class command** that offloads heavy work to an
-  isolated Claude Code subagent and merges back only a digest.
-- **Fully transparent, zero-dependency heuristics** — deterministic, auditable,
-  no trained model and no network. Every transform is readable Python.
+---
+
+## Install
+
+The canonical install is the Python package; it provides the `justokenmax` CLI.
+
+**From this repo (works today — Python 3.9+):**
+
+```bash
+git clone https://github.com/Kalmantic/jusTokenMax && cd jusTokenMax
+pip install pypdf Pillow            # required codecs
+pip install pdfplumber              # optional: better PDF table extraction
+pip install ./python                # installs the `justokenmax` CLI
+justokenmax --version
+```
+
+**From PyPI** (once published): `pip install justokenmax`.
+
+**npm** (optional thin shim — runs `python -m justokenmax`, so it still needs the
+Python package above): `npm install -g @kalmantic/justokenmax`.
+
+**As a Claude Code plugin:** add this repo as a plugin. The `Read` hook then
+optimizes PDFs / images / logs / JSON / notebooks / CSV / diffs automatically,
+and the commands, skills, and MCP server become available.
+
+**As an MCP server (any agent — Codex CLI, OpenCode, Cursor, Cline):** point the
+client at `python -m justokenmax.mcp_server`. Example:
+
+```toml
+# Codex: ~/.codex/config.toml
+[mcp_servers.justokenmax]
+command = "python3"
+args = ["-m", "justokenmax.mcp_server"]
+```
+
+---
+
+## The levers
+
+| Module | Reduces | How | Measured |
+| --- | --- | --- | --- |
+| **Attachments** | PDFs & images you read | PDF → page-delimited Markdown (drops the per-page image channel); images downscaled ≤1568px + recompressed | **−56%** on real PDFs |
+| **Logs** | verbose build/test/CI output | strip ANSI, collapse repeats (`×N`), fold stack traces, keep errors/warnings + head/tail | **−99%** |
+| **JSON / tool output** | big structured payloads | sample long arrays, truncate long strings, cap depth, minify whitespace | **−99%** |
+| **Notebooks** | `.ipynb` files | drop base64 image outputs, truncate cell outputs, keep code + markdown | **−99%** |
+| **CSV / tabular** | large tables | header + inferred column types + sample rows + row count | **−99%** |
+| **Git diffs** | lockfile/generated churn | keep code hunks, collapse lockfile/generated/minified file diffs to one line | lockfile → 1 line |
+| **Delta reads** | re-reading the same file | return only the diff since the last read, not the whole file | **−96%** |
+| **Redaction** | secrets & blobs in text | mask API keys/tokens/passwords, elide base64/data-URIs (tokens **+** safety) | safety + tokens |
+| **Code index + outline** | reading whole files to find code | symbol map (`file:line` + signature) + file outlines so you read only the relevant range | **−97%** to locate a symbol |
+| **Terse output** | tokens the agent *writes* | output-style steering: lead with answer, fragments, no filler — facts kept exact | output-side |
+| **Chat branching** | sub-tasks that bloat the thread | offload heavy work to an isolated subagent context, merge back only a digest | workflow skill |
+| **Cache alignment** | recompute on long sessions | keep the prompt prefix stable so the provider KV cache keeps hitting | guidance |
+
+All compression is **reversible** — originals are cached by content hash and
+`justokenmax retrieve <artifact>` hands the full version back — and tracked in a
+lifetime ledger (`justokenmax stats`). A content **sniffer** routes generic files
+(`.txt`/`.out`/no-extension) to the right compressor automatically.
+
+## How each lever works
+
+**Attachments.** A PDF is billed as *text + a rendered page-image* (~1,500
+tokens/page after the API clamps a page to ≤1.15MP). jusTokenMax extracts the
+text to clean Markdown and **drops the image channel** — you keep the words,
+stop paying for the picture, and gain something searchable and quotable. Images
+are downscaled to the model's resolution ceiling and recompressed.
+
+**Logs.** Build/test/CI output is mostly noise: ANSI codes, progress spam, the
+same line hundreds of times, 50-frame stack traces. jusTokenMax digests it —
+strips colour, collapses repeated lines into `(×N)`, folds long traces to
+first+last frame, and always keeps error/warning lines plus the head and tail.
+
+**Code index + outline.** Reading entire files to find one function is the
+biggest avoidable input cost. jusTokenMax parses the repo (Python via `ast`,
+JS/TS/Java via brace-aware scanners, others via regex) into a symbol map, so
+`justokenmax query parse_config` returns `file:line` + a full signature, and
+`justokenmax outline <file>` returns a file's shape with no bodies.
+
+**Chat branching.** Every file read stays in context for the rest of the
+session. Branching runs a self-contained sub-task in a subagent whose context is
+discarded afterward, returning only a compact digest.
+
+## Results
+
+Measured by [`benchmarks/benchmark.py`](benchmarks/benchmark.py). Text is counted
+with a real tokenizer (tiktoken / `cl100k`); the PDF "before" uses the page-image
+model at a conservative ~1,500 tokens/page. Full detail (regenerable) in
+[`benchmarks/RESULTS.md`](benchmarks/RESULTS.md).
+
+**PDF → Markdown** (real public PDFs)
+
+| Document | Pages | Before | After | Reduction |
+| --- | ---: | ---: | ---: | ---: |
+| *Attention Is All You Need* (arXiv 1706.03762) | 15 | 37,074 | 14,574 | **−60%** |
+| IRS Form W-9 | 6 | 18,305 | 9,305 | **−49%** |
+| **Total** | 21 | **55,379** | **23,879** | **−56%** |
+
+**Logs / JSON / Notebook / CSV / delta**
+
+| Input | Tokens before | Tokens after | Reduction |
+| --- | ---: | ---: | ---: |
+| build log (4,345 → 21 lines) | 107,668 | 396 | **−99%** |
+| API response (2,000-row payload) | 168,023 | 374 | **−99%** |
+| notebook, 20 cells w/ image outputs | 401,170 | 610 | **−99%** |
+| CSV, 5,000 rows | 57,340 | 237 | **−99%** |
+| delta re-read, 1 edit in 600 lines | 2,407 | 88 | **−96%** |
+
+**Code index** — locating a symbol vs reading the file, over 21 lookups in
+jusTokenMax's own source: **16,691 → 486 tokens (−97%)**. **Images** — 3000×2000
+→ 1568×1045, 186 KB → 107 KB (**−42% bytes**).
+
+Reproduce: `python benchmarks/benchmark.py --fetch`.
+
+## Use
+
+```bash
+justokenmax optimize report.pdf shot.png build.log api.json data.csv nb.ipynb  # by type
+justokenmax logs ci-output.log                      # compress a verbose log
+justokenmax json response.json                      # compress a JSON payload
+justokenmax delta src/app.py                        # only what changed since last read
+justokenmax redact secrets.txt                      # mask secrets + elide blobs
+justokenmax index && justokenmax query parse_config # build index, find a symbol
+justokenmax retrieve <artifact>                     # get the original back (reversible)
+justokenmax stats                                   # lifetime token savings
+```
+
+### Plugin surface
+
+- **Hook:** `PreToolUse(Read)` transparently rewrites a `Read` of a PDF / image /
+  `.log` / JSON / `.ipynb` / CSV / diff to the cheap artifact via `updatedInput`.
+  It **never blocks a Read** — any failure falls through untouched.
+- **MCP server:** `.mcp.json` launches a stdlib stdio server exposing
+  `justokenmax_optimize`, `_compress_json`, `_compress_log`, `_query`, `_delta`,
+  `_redact`, `_retrieve`, `_stats` — so **any** MCP-capable agent can call it.
+- **Commands:** `/justokenmax:optimize|logs|index|query|delta|redact|retrieve|terse|branch|compress-memory|learn|stats`.
+- **Skills:** `attachments`, `code-index`, `chat-branch`, `terse-output`,
+  `cache-align`.
 
 ## Limits & honesty
 
 - **No OCR.** Scanned / image-only PDFs have no text layer → empty Markdown;
   jusTokenMax detects no saving and passes the original through.
-- **PDF per-page tokens are a conservative model**, not a billed number — treat
-  the percentages as well-grounded estimates.
+- **PDF per-page tokens are a conservative model**, not a billed number.
 - **Image token savings are base64-pipeline only** (native vision downscales
   regardless); the always-real image win is bytes.
-- **The code index is a snapshot**, not live — re-run `justokenmax index` after big
-  changes. Non-Python symbols use regex heuristics (good enough to point you,
-  not a full parser).
+- **The code index is a snapshot**, not live — re-run `justokenmax index` after
+  big changes.
 
 ## Safety
 
 Hooks run on untrusted files, so the converters are bounded: PDFs capped at
 2,000 pages / ~5M chars of output, Pillow's decompression-bomb guard kept active,
-no shell execution, output paths are content-hash names never derived from the
-input filename, and the Read hook fails open.
+no shell execution, output paths are content-hash names, and the Read hook fails
+open. Secrets and base64 blobs are masked inside every text digest.
 
 ## Test
 
 ```bash
 cd python && pip install -e . pytest pdfplumber
-pytest -q      # 75 tests: pdf, image, log, json, notebook, csv, delta, redact, code-index, optimize, cli, hook, mcp
+pytest -q      # pdf, image, log, json, notebook, csv, diff, delta, redact, code-index, outline, optimize, cli, hook, mcp
 ```
+
+## Support this project
+
+jusTokenMax is free and MIT-licensed. If it keeps your agent under budget, please
+consider **[sponsoring on GitHub](https://github.com/sponsors/Kashi-KS)** — it
+funds OCR, more languages, and the cross-agent roadmap. Thank you 🙏
 
 ## Roadmap
 
-We'll keep improving: OCR fallback for scans, DOCX/PPTX/HTML inputs, AST-level
-code *content* compression, live index refresh, calibrating the per-page token
-model against real API counts, a cross-agent shared-memory store, and a learn
-loop that mines sessions for durable corrections. PRs welcome.
+OCR for scans, DOCX/PPTX/HTML inputs, deeper multi-language parsing, an OpenCode
+plugin + `justokenmax install <agent>` for one-command cross-agent setup, an MCP
+compression proxy, and a learn loop. PRs welcome.
