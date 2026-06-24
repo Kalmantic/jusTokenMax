@@ -214,9 +214,10 @@ justokenmax stats                                   # lifetime token savings
   `.log` / JSON / `.ipynb` / CSV / diff to the cheap artifact via `updatedInput`.
   It **never blocks a Read** — any failure falls through untouched.
 - **MCP server:** `.mcp.json` launches a stdlib stdio server exposing
-  `justokenmax_optimize`, `_compress_json`, `_compress_log`, `_query`, `_delta`,
-  `_redact`, `_retrieve`, `_stats` — so **any** MCP-capable agent can call it.
-- **Commands:** `/justokenmax:optimize|logs|index|query|delta|redact|retrieve|terse|branch|compress-memory|learn|stats`.
+  `justokenmax_optimize`, `_compress_json`, `_compress_log`, `_compress_diff`,
+  `_query`, `_outline`, `_delta`, `_redact`, `_retrieve`, `_stats` — so **any**
+  MCP-capable agent can call it.
+- **Commands:** `/justokenmax:optimize|logs|json|diff|index|query|outline|delta|redact|retrieve|terse|branch|compress-memory|learn|stats`.
 - **Skills:** `attachments`, `code-index`, `chat-branch`, `terse-output`,
   `cache-align`.
 
