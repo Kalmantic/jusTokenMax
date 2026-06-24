@@ -114,3 +114,10 @@ def test_install_cline(fake_home):
     assert p.endswith("cline_mcp_settings.json")
     data = json.loads(Path(p).read_text())
     assert data["mcpServers"]["justokenmax"]["command"] == "npx"
+
+
+def test_install_kilocode(fake_home):
+    inst.install("kilocode")
+    entry = json.loads(Path(inst.config_path("kilocode")).read_text())["mcp"]["justokenmax"]
+    assert entry["type"] == "local"
+    assert entry["command"] == ["npx", "-y", "@kalmantic/justokenmax", "mcp"]
