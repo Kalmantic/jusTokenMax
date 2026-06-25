@@ -17,6 +17,19 @@ JSON_EXTS = {".json", ".ndjson"}
 NB_EXTS = {".ipynb"}
 CSV_EXTS = {".csv", ".tsv"}
 DIFF_EXTS = {".diff", ".patch"}
+# Source files we can compress to a signature-only skeleton (outline). Limited
+# to extensions the symbol parser (codeindex.LANGS) actually understands, so we
+# never promise an outline we can't produce.
+CODE_EXTS = {
+    ".py",
+    ".js", ".jsx", ".mjs", ".cjs",
+    ".ts", ".tsx",
+    ".go",
+    ".rs",
+    ".java",
+    ".rb",
+    ".c", ".h", ".cc", ".cpp", ".hpp",
+}
 # Ambiguous extensions whose kind we decide by sniffing the content.
 GENERIC_EXTS = {".txt", ".out", ".text", ""}
 
@@ -32,11 +45,15 @@ CSV_MIN_BYTES = 4 * 1024
 # Below this a diff is small enough to read whole.
 DIFF_MIN_BYTES = 4 * 1024
 
+# Below this a source file is short enough to read whole; an outline of a tiny
+# file rarely beats just reading it.
+CODE_MIN_BYTES = 6 * 1024
+
 
 @dataclasses.dataclass
 class OptimizeResult:
     ok: bool
-    kind: str                 # "pdf" | "image" | "skip"
+    kind: str                 # "pdf" | "image" | "code" | "skip" | ...
     source: str
     output: Optional[str]     # path to optimized artifact (None if skipped)
     tokens_before: int
@@ -95,6 +112,8 @@ def _kind_for(path: str) -> str:
         return "csv"
     if ext in DIFF_EXTS:
         return "diff"
+    if ext in CODE_EXTS:
+        return "code"
     if ext in GENERIC_EXTS:
         return _sniff(path)
     return "skip"
@@ -270,6 +289,37 @@ def optimize(
                              tokens_after, cached=False,
                              note=f"{stats['files_elided']}/{stats['files_total']} "
                                   f"files elided")
+
+    elif kind == "code":
+        if os.path.getsize(path) < CODE_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="source already small")
+        key, out = cache.cache_paths(path, opts, ".outline.md")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "code", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .outline import file_outline
+        try:
+            digest, stats = file_outline(path)
+        except Exception:  # fail-open: any parser error -> passthrough
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="outline failed")
+        digest = _redact(digest)
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        # Only worth it if the skeleton is meaningfully smaller than the source.
+        if not stats.get("ok") or tokens_after >= tokens_before * 3 // 4:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="outline not smaller")
+        out.write_text(digest, encoding="utf-8")
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after})
+        res = OptimizeResult(True, "code", path, str(out), tokens_before,
+                             tokens_after, cached=False,
+                             note=f"{stats['symbols']} symbols ({stats['lang']})")
 
     else:  # image
         if os.path.getsize(path) < IMAGE_MIN_BYTES:

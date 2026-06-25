@@ -6,7 +6,7 @@ to your project. A lever can be disabled two ways (either wins):
   * env:   JUSTOKENMAX_DISABLE=pdf,image      (comma-separated kinds)
   * file:  ~/.justokenmax/config.json  ->  {"disabled": ["pdf", "image"]}
 
-Kinds: pdf, image, log, json, notebook, csv, diff, redact. Disabling a kind
+Kinds: pdf, image, log, json, notebook, csv, diff, code, redact. Disabling a kind
 makes optimize() skip it (the Read hook then leaves those files untouched);
 disabling `redact` stops the secret/blob masking pass inside text digests.
 """
@@ -20,7 +20,7 @@ from typing import Set
 
 from . import cache
 
-KINDS = ("pdf", "image", "log", "json", "notebook", "csv", "diff", "redact")
+KINDS = ("pdf", "image", "log", "json", "notebook", "csv", "diff", "code", "redact")
 
 
 def config_path() -> str:

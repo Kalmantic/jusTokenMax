@@ -111,7 +111,8 @@ def main(argv=None) -> int:
     pc = sub.add_parser("config", help="show or toggle which levers are enabled")
     pc.add_argument("action", nargs="?", choices=("enable", "disable"),
                     help="enable/disable a lever (omit to show current config)")
-    pc.add_argument("kind", nargs="?", help="pdf|image|log|json|notebook|csv|diff|redact")
+    pc.add_argument("kind", nargs="?",
+                    help="pdf|image|log|json|notebook|csv|diff|code|redact")
     pc.add_argument("--json", action="store_true")
 
     from .install import AGENTS
