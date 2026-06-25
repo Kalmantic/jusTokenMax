@@ -42,6 +42,25 @@ def test_stats_tool_returns_ledger():
     assert "total_tokens_saved" in json.loads(text)
 
 
+def test_unmask_tool_restores_and_audits():
+    from justokenmax import cache
+    from justokenmax.redact import redact_with_map
+    secret = "s" + "k-" + "Z" * 22
+    masked, mapping = redact_with_map(f"token={secret}")
+    cache.save_redaction_map("mcpkey", mapping)
+    text = _call("justokenmax_unmask",
+                 {"key": "mcpkey", "text": masked, "actor": "agent"})
+    restored = text["content"][0]["text"]
+    assert secret in restored and "isError" not in text
+    assert cache.read_audit_log()[-1]["actor"] == "agent"
+
+
+def test_tools_list_includes_unmask():
+    resp = mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    names = {t["name"] for t in resp["result"]["tools"]}
+    assert "justokenmax_unmask" in names
+
+
 def test_unknown_tool_is_error():
     resp = mcp.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
                                "params": {"name": "nope", "arguments": {}}})

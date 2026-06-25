@@ -1,4 +1,9 @@
-from justokenmax.redact import mask_secrets, redact
+from justokenmax.redact import (
+    mask_secrets,
+    redact,
+    redact_with_map,
+    unmask_text,
+)
 
 
 def test_elides_base64_blob():
@@ -51,6 +56,46 @@ def test_mask_secrets_masks_without_eliding_blobs():
     clean, n = mask_secrets(f"key={secret} blob={blob}")
     assert secret not in clean and n >= 1
     assert blob in clean                      # blob NOT elided by mask_secrets
+
+
+def test_redact_with_map_masks_and_yields_recoverable_map():
+    secret = "s" + "k-" + "Z" * 22          # OpenAI sk- shape
+    masked, mapping = redact_with_map(f"token={secret}")
+    assert secret not in masked              # original not in masked digest
+    assert mapping                           # a recoverable map was produced
+    # The map's values hold the originals; round-tripping restores them.
+    assert secret in mapping.values()
+    restored, n = unmask_text(masked, mapping)
+    assert secret in restored and n == 1
+
+
+def test_redact_with_map_kv_secret_round_trips():
+    masked, mapping = redact_with_map('password = "hunter2hunter2"')
+    assert "hunter2hunter2" not in masked
+    restored, n = unmask_text(masked, mapping)
+    assert restored == 'password = "hunter2hunter2"'
+    assert n == 1
+
+
+def test_redact_with_map_placeholders_are_stable_and_ordered():
+    # Deterministic: ids are content-ordered s1, s2, ... — no clock/random.
+    a = "AK" + "IA" + "A" * 16               # AWS access key id shape
+    b = "gh" + "p_" + "B" * 36               # GitHub token shape
+    masked, mapping = redact_with_map(f"one={a} two={b}")
+    assert "⟦jtm:s1⟧" in masked and "⟦jtm:s2⟧" in masked
+    masked2, mapping2 = redact_with_map(f"one={a} two={b}")
+    assert masked == masked2 and mapping == mapping2
+
+
+def test_redact_with_map_no_secrets_empty_map():
+    masked, mapping = redact_with_map("just normal text, nothing to mask")
+    assert masked == "just normal text, nothing to mask"
+    assert mapping == {}
+
+
+def test_unmask_text_leaves_unknown_placeholders_intact():
+    restored, n = unmask_text("value=abcd…wxyz⟦jtm:s9⟧", {})
+    assert "⟦jtm:s9⟧" in restored and n == 0
 
 
 def test_optimize_redact_masks_secrets_even_when_redact_disabled(monkeypatch):

@@ -122,6 +122,26 @@ TOOLS = [
         },
     },
     {
+        "name": "justokenmax_unmask",
+        "description": "Audited reversible redaction: recover the original "
+                       "secrets in a masked digest using its stored map "
+                       "(opt-in; requires the digest to have been written with "
+                       "audited-reversible redaction). Every unmask is recorded "
+                       "to the redaction audit log.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "key": {"type": "string",
+                        "description": "cache key the redaction map is stored under"},
+                "text": {"type": "string",
+                         "description": "the masked digest text to restore"},
+                "actor": {"type": "string",
+                          "description": "who is performing the unmask (audited)"},
+            },
+            "required": ["key", "text"],
+        },
+    },
+    {
         "name": "justokenmax_stats",
         "description": "Lifetime token-savings ledger.",
         "inputSchema": {"type": "object", "properties": {}},
@@ -193,6 +213,11 @@ def _tool_retrieve(args):
     return origin or "no recorded original for that artifact"
 
 
+def _tool_unmask(args):
+    from justokenmax import cache
+    return cache.unmask(args["key"], args["text"], audit_actor=args.get("actor"))
+
+
 def _tool_stats(args):
     from justokenmax import cache
     return json.dumps(cache.read_ledger())
@@ -213,6 +238,7 @@ DISPATCH = {
     "justokenmax_delta": _tool_delta,
     "justokenmax_redact": _tool_redact,
     "justokenmax_retrieve": _tool_retrieve,
+    "justokenmax_unmask": _tool_unmask,
     "justokenmax_stats": _tool_stats,
     "justokenmax_discover": _tool_discover,
 }
