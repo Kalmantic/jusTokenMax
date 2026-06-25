@@ -58,11 +58,12 @@ def test_unknown_method_errors():
     assert resp["error"]["code"] == -32601
 
 
-def test_discover_tool_returns_report(monkeypatch, tmp_path):
+def test_discover_tool_returns_formatted_summary(monkeypatch, tmp_path):
+    # The MCP tool returns a human-readable weekly summary, not raw json.
     monkeypatch.setenv("JUSTOKENMAX_HISTORY", str(tmp_path / "absent"))
     text = _call("justokenmax_discover", {})["content"][0]["text"]
-    rep = json.loads(text)
-    assert "recoverable_tokens" in rep and rep["note"] == "no history dir"
+    assert "recoverable tokens" in text
+    assert "no history dir" in text
 
 
 def test_cli_mcp_subcommand_runs(monkeypatch):

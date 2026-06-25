@@ -1,6 +1,8 @@
 """Survey of Claude Code history -> recoverable tokens + compressor backlog."""
 
 import json
+import os
+import time
 
 from justokenmax import discover
 
@@ -105,3 +107,73 @@ def test_format_report_is_readable(tmp_path, monkeypatch, big_json):
     out = discover.format_report(discover.discover())
     assert "recoverable tokens" in out
     assert "json" in out
+
+
+def test_format_report_surfaces_total_kinds_and_missed_formats(tmp_path, monkeypatch, big_json):
+    hist = tmp_path / "projects"
+    hist.mkdir(parents=True)
+    # A real-but-unsupported source so it lands in the missed-formats backlog.
+    cfg = tmp_path / "settings.toml"
+    cfg.write_text("a = 1\n")
+    _session(hist, "s.jsonl", [big_json, str(cfg)])
+    monkeypatch.setenv("JUSTOKENMAX_HISTORY", str(hist))
+
+    rep = discover.discover()
+    out = discover.format_report(rep)
+    # recoverable total is rendered (with thousands separators)
+    assert f"{rep['recoverable_tokens']:,} recoverable tokens" in out
+    # top kinds section names the kind we compressed
+    assert "top kinds by recoverable tokens" in out
+    assert "json" in out
+    # missed formats are framed as a roadmap, not just "unsupported"
+    assert "compressors worth adding" in out
+    assert ".toml" in out
+
+
+def test_format_report_shows_since_last_run_delta():
+    prev = {"recoverable_tokens": 100}
+    cur = {"recoverable_tokens": 175}
+    out = discover.format_report(cur, previous=prev)
+    assert "since last run: +75 recoverable tokens" in out
+    out2 = discover.format_report({"recoverable_tokens": 40}, previous=prev)
+    assert "since last run: -60 recoverable tokens" in out2
+
+
+def test_newer_than_days_filters_logs_by_mtime(tmp_path, monkeypatch, big_json):
+    hist = tmp_path / "projects"
+    hist.mkdir(parents=True)
+    recent = _session(hist, "recent.jsonl", [big_json])
+    stale = _session(hist, "stale.jsonl", [big_json])
+    # Backdate the stale log to 30 days ago; keep `recent` fresh.
+    old = time.time() - 30 * 86400
+    os.utime(stale, (old, old))
+    monkeypatch.setenv("JUSTOKENMAX_HISTORY", str(hist))
+
+    windowed = discover.discover(newer_than_days=7)
+    assert windowed["sessions"] == 1          # only the recent log survives
+    assert windowed["window_days"] == 7
+
+    full = discover.discover()
+    assert full["sessions"] == 2              # no window -> both logs scanned
+
+
+def test_empty_history_renders_graceful_report(tmp_path, monkeypatch):
+    monkeypatch.setenv("JUSTOKENMAX_HISTORY", str(tmp_path / "nope"))
+    rep = discover.discover(newer_than_days=7)
+    out = discover.format_report(rep)
+    assert "0 recoverable tokens" in out
+    assert "no history dir" in out
+
+
+def test_save_and_load_report_roundtrip(tmp_path, monkeypatch, big_json):
+    hist = tmp_path / "projects"
+    hist.mkdir(parents=True)
+    _session(hist, "s.jsonl", [big_json])
+    monkeypatch.setenv("JUSTOKENMAX_HISTORY", str(hist))
+
+    assert discover.load_last_report() is None    # nothing cached yet
+    rep = discover.discover()
+    discover.save_report(rep)
+    back = discover.load_last_report()
+    assert back is not None
+    assert back["recoverable_tokens"] == rep["recoverable_tokens"]

@@ -18,6 +18,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import time
 from collections import Counter
 from pathlib import Path
 from typing import Optional
@@ -74,11 +75,35 @@ def _read_paths(jsonl_path: str):
         return
 
 
-def discover(root: Optional[str] = None, max_files: int = 5000) -> dict:
+def _within_window(log: str, cutoff: Optional[float]) -> bool:
+    """True if `log`'s mtime is at/after `cutoff` (or no window in effect).
+
+    Fail-open: an unstattable log is kept (better to over-survey than to drop a
+    file because its mtime was momentarily unreadable).
+    """
+    if cutoff is None:
+        return True
+    try:
+        return os.stat(log).st_mtime >= cutoff
+    except OSError:
+        return True
+
+
+def discover(
+    root: Optional[str] = None,
+    max_files: int = 5000,
+    newer_than_days: Optional[float] = None,
+) -> dict:
     """Survey history under `root` and return a recoverable-tokens report.
 
     The report is deterministic for a fixed history + filesystem (no clock or
-    random input), so it is safe to cache or diff.
+    random input baked into the output), so it is safe to cache or diff.
+
+    `newer_than_days` is an optional window: only session logs whose file
+    st_mtime is within the last N days are scanned (the "weekly" flywheel
+    view). The cutoff is derived from the wall clock as a *filter input* only —
+    it is never written into the report — so for a fixed set of mtimes the set
+    of surveyed logs, and therefore the report, is reproducible.
     """
     root = root or history_dir()
     report = {
@@ -92,6 +117,8 @@ def discover(root: Optional[str] = None, max_files: int = 5000) -> dict:
         "by_path": {},
         "unsupported_exts": {},
     }
+    if newer_than_days is not None:
+        report["window_days"] = newer_than_days
     if not os.path.isdir(root):
         report["note"] = "no history dir"
         return report
@@ -102,7 +129,12 @@ def discover(root: Optional[str] = None, max_files: int = 5000) -> dict:
     seen_paths: set = set()
     n_reads = 0
 
+    cutoff = None
+    if newer_than_days is not None:
+        cutoff = time.time() - newer_than_days * 86400.0
+
     logs = sorted(glob.glob(os.path.join(root, "**", "*.jsonl"), recursive=True))
+    logs = [g for g in logs if _within_window(g, cutoff)]
     report["sessions"] = len(logs)
     capped = False
     for log in logs:
@@ -158,22 +190,37 @@ def _recoverable(path: str, unsupported: Counter, report: dict):
     return res.tokens_saved, res.kind
 
 
-def format_report(report: dict) -> str:
-    """Human-readable summary of a discover() report."""
+def format_report(report: dict, previous: Optional[dict] = None) -> str:
+    """Human-readable, weekly-style summary of a discover() report.
+
+    Deterministic: every line is derived from `report` (and the optional
+    `previous` report for a "since last run" delta). No clock or random input.
+
+    Surfaces three things to make discover a recurring flywheel rather than a
+    one-shot scan: the headline recoverable total, the top file kinds by
+    recoverable tokens, and the TOP MISSED FORMATS (unsupported extensions
+    ranked) framed as compressors worth adding — the roadmap backlog.
+    """
     lines = []
     total = report.get("recoverable_tokens", 0)
+    window = report.get("window_days")
+    span = f"last {window:g}d" if window is not None else "all history"
     lines.append(
-        f"justokenmax discover: {total:,} recoverable tokens across "
+        f"justokenmax discover ({span}): {total:,} recoverable tokens across "
         f"{report.get('files_seen', 0)} files "
         f"({report.get('reads_total', 0)} reads in "
         f"{report.get('sessions', 0)} sessions)"
     )
+    if previous is not None:
+        delta = total - previous.get("recoverable_tokens", 0)
+        sign = "+" if delta >= 0 else "-"
+        lines.append(f"  since last run: {sign}{abs(delta):,} recoverable tokens")
     if report.get("note"):
         lines.append(f"  ({report['note']})")
     by_kind = report.get("by_kind") or {}
     if by_kind:
-        lines.append("  recoverable by kind:")
-        for kind, n in by_kind.items():
+        lines.append("  top kinds by recoverable tokens:")
+        for kind, n in list(by_kind.items())[:10]:
             lines.append(f"    {kind:9} {n:,}")
     by_path = report.get("by_path") or {}
     if by_path:
@@ -182,7 +229,34 @@ def format_report(report: dict) -> str:
             lines.append(f"    -{n:,}  {p}")
     unsup = report.get("unsupported_exts") or {}
     if unsup:
-        lines.append("  unsupported (compressor backlog):")
+        lines.append("  top missed formats (compressors worth adding):")
         for ext, n in list(unsup.items())[:10]:
             lines.append(f"    {ext:9} {n} reads")
     return "\n".join(lines)
+
+
+def _report_cache_path() -> Path:
+    """Where the last discover() report is stashed for a 'since last run' delta."""
+    from . import cache as _cache
+    return _cache.ROOT / "discover_last.json"
+
+
+def load_last_report() -> Optional[dict]:
+    """The previous cached report, or None. Fail-open on any read/parse error."""
+    try:
+        with open(_report_cache_path(), encoding="utf-8") as fh:
+            obj = json.load(fh)
+        return obj if isinstance(obj, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def save_report(report: dict) -> None:
+    """Stash `report` as the new baseline for the next delta. Fail-open."""
+    try:
+        p = _report_cache_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "w", encoding="utf-8") as fh:
+            json.dump(report, fh, sort_keys=True)
+    except OSError:
+        return
