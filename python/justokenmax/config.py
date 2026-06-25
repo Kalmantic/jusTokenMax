@@ -6,9 +6,12 @@ to your project. A lever can be disabled two ways (either wins):
   * env:   JUSTOKENMAX_DISABLE=pdf,image      (comma-separated kinds)
   * file:  ~/.justokenmax/config.json  ->  {"disabled": ["pdf", "image"]}
 
-Kinds: pdf, image, log, json, notebook, csv, diff, redact. Disabling a kind
+Kinds: pdf, image, log, json, ndjson, notebook, csv, diff, code, lockfile,
+minified, redact. Disabling a kind
 makes optimize() skip it (the Read hook then leaves those files untouched);
-disabling `redact` stops the secret/blob masking pass inside text digests.
+disabling `redact` stops the optional token-cutting pass (base64 blob /
+data-URI elision) inside text digests — secret masking (API keys, tokens,
+passwords) always runs, so credentials are never written to a cache artifact.
 """
 
 from __future__ import annotations
@@ -20,7 +23,14 @@ from typing import Set
 
 from . import cache
 
-KINDS = ("pdf", "image", "log", "json", "notebook", "csv", "diff", "redact")
+KINDS = ("pdf", "image", "log", "json", "ndjson", "notebook", "csv", "diff",
+         "code", "lockfile", "minified", "redact")
+
+# Ceiling for a single rendered read artifact (e.g. a file outline). When the
+# output would exceed this, the producer keeps the most salient parts and marks
+# the remainder. Override via env JUSTOKENMAX_MAX_READ_TOKENS or config JSON key
+# "max_read_tokens". 0 (or negative) disables the cap.
+DEFAULT_MAX_READ_TOKENS = 2000
 
 
 def config_path() -> str:
@@ -46,6 +56,22 @@ def disabled_kinds() -> Set[str]:
 
 def is_enabled(kind: str) -> bool:
     return kind not in disabled_kinds()
+
+
+def max_read_tokens() -> int:
+    """Token ceiling for a rendered read artifact (env wins, then JSON, then
+    the default). Fail-open: any malformed override falls back to the default."""
+    env = os.environ.get("JUSTOKENMAX_MAX_READ_TOKENS")
+    if env is not None:
+        try:
+            return int(env)
+        except ValueError:
+            return DEFAULT_MAX_READ_TOKENS
+    val = load().get("max_read_tokens", DEFAULT_MAX_READ_TOKENS)
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return DEFAULT_MAX_READ_TOKENS
 
 
 def set_kind(kind: str, enabled: bool) -> dict:

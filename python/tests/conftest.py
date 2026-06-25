@@ -70,6 +70,16 @@ def text_pdf(tmp_path):
 
 
 @pytest.fixture
+def secret_pdf(tmp_path):
+    # A PDF whose text contains a secret-shaped token (assembled at runtime so no
+    # literal key sits in source). The optimized markdown artifact must mask it.
+    p = tmp_path / "leaky.pdf"
+    secret = "AK" + "IA" + "S" * 16          # AWS access key id shape
+    _build_text_pdf(str(p), ["Deployment notes", f"aws_key = {secret}"])
+    return str(p), secret
+
+
+@pytest.fixture
 def big_image(tmp_path):
     """A large, hard-to-compress PNG (random noise) above the skip threshold."""
     from PIL import Image
@@ -107,6 +117,20 @@ def big_json(tmp_path):
 
 
 @pytest.fixture
+def big_ndjson(tmp_path):
+    """Newline-delimited JSON event log of a few record shapes."""
+    import json
+    lines = [json.dumps({"ts": i, "level": "info", "msg": f"event {i}"})
+             for i in range(800)]
+    lines += [json.dumps({"ts": i, "level": "error", "code": 500, "err": "boom"})
+              for i in range(300)]
+    lines.append("{ this line is not valid json")   # tolerated
+    p = tmp_path / "events.ndjson"
+    p.write_text("\n".join(lines) + "\n")
+    return str(p)
+
+
+@pytest.fixture
 def big_log(tmp_path):
     lines = ["INFO starting"]
     lines += [f"compiling module {i}" for i in range(400)]
@@ -132,6 +156,47 @@ def big_notebook(tmp_path):
     ], "metadata": {}, "nbformat": 4}
     p = tmp_path / "nb.ipynb"
     p.write_text(json.dumps(nb))
+    return str(p)
+
+
+@pytest.fixture
+def uniform_json_2mb(tmp_path):
+    """A ~2MB top-level uniform array of objects — schema-mode bait."""
+    import json
+    data = [{"id": i, "name": f"item-{i}", "active": i % 2 == 0,
+             "score": i * 1.5} for i in range(30000)]
+    p = tmp_path / "rows.json"
+    p.write_text(json.dumps(data))
+    assert p.stat().st_size > 1_000_000
+    return str(p)
+
+
+@pytest.fixture
+def package_lock(tmp_path):
+    import json
+    data = {"name": "app", "lockfileVersion": 3, "packages": {
+        "": {"name": "app"},
+        "node_modules/lodash": {"version": "4.17.21",
+                                "resolved": "https://registry/lodash",
+                                "integrity": "sha512-" + "A" * 90},
+        "node_modules/react": {"version": "18.2.0",
+                               "integrity": "sha512-" + "B" * 90},
+        "node_modules/typescript": {"version": "5.4.2",
+                                    "integrity": "sha512-" + "C" * 90},
+    }}
+    p = tmp_path / "package-lock.json"
+    # Pad with bulk so it clears the JSON_MIN_BYTES floor comfortably.
+    data["packages"]["node_modules/filler"] = {
+        "version": "1.0.0", "integrity": "sha512-" + "D" * 6000}
+    p.write_text(json.dumps(data, indent=2))
+    return str(p)
+
+
+@pytest.fixture
+def min_js(tmp_path):
+    """A .min.js asset: one giant line of opaque generated code."""
+    p = tmp_path / "bundle.min.js"
+    p.write_text("!function(e){" + "var x=1;" * 4000 + "}(window);")
     return str(p)
 
 

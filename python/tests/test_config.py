@@ -36,11 +36,34 @@ def test_optimize_skips_disabled_kind(big_log, monkeypatch):
     assert res.ok is False and res.note == "disabled by config"
 
 
-def test_disabling_redact_leaves_secret(big_log, monkeypatch):
+def test_optimize_skips_disabled_ndjson(big_ndjson, monkeypatch):
+    monkeypatch.setenv("JUSTOKENMAX_DISABLE", "ndjson")
+    res = optimize(big_ndjson)
+    assert res.ok is False and res.note == "disabled by config"
+
+
+def test_disabling_redact_still_masks_secrets(big_log, monkeypatch):
+    # Disabling the `redact` kind turns off the optional token-cutting pass
+    # (base64 / data-URI elision) but NOT secret masking — a live credential
+    # must never be written to a cache artifact regardless of config.
     monkeypatch.setenv("JUSTOKENMAX_DISABLE", "redact")
     res = optimize(big_log)
     digest = Path(res.output).read_text(encoding="utf-8")
-    assert "L" * 22 in digest          # secret NOT masked when redact disabled
+    assert "L" * 22 not in digest      # secret still masked when redact disabled
+
+
+def test_max_read_tokens_default():
+    assert cfg.max_read_tokens() == cfg.DEFAULT_MAX_READ_TOKENS
+
+
+def test_max_read_tokens_env_override(monkeypatch):
+    monkeypatch.setenv("JUSTOKENMAX_MAX_READ_TOKENS", "500")
+    assert cfg.max_read_tokens() == 500
+
+
+def test_max_read_tokens_bad_env_falls_back(monkeypatch):
+    monkeypatch.setenv("JUSTOKENMAX_MAX_READ_TOKENS", "not-a-number")
+    assert cfg.max_read_tokens() == cfg.DEFAULT_MAX_READ_TOKENS
 
 
 def test_summary_shape():

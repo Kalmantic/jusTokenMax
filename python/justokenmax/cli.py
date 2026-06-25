@@ -98,6 +98,13 @@ def main(argv=None) -> int:
     pq.add_argument("--limit", type=int, default=50)
     pq.add_argument("--json", action="store_true")
 
+    pdisc = sub.add_parser("discover",
+                           help="survey Claude Code history for recoverable tokens "
+                                "+ the unsupported-extension backlog")
+    pdisc.add_argument("--root", default=None,
+                       help="history dir (default: ~/.claude/projects)")
+    pdisc.add_argument("--json", action="store_true")
+
     sub.add_parser("stats").add_argument("--json", action="store_true")
     sub.add_parser("sessions", help="per-session savings (effectiveness over time)").add_argument("--json", action="store_true")
     sub.add_parser("session-end", help="record the current session's savings (used by the Stop hook)").add_argument("--session-id", default=None)
@@ -111,7 +118,8 @@ def main(argv=None) -> int:
     pc = sub.add_parser("config", help="show or toggle which levers are enabled")
     pc.add_argument("action", nargs="?", choices=("enable", "disable"),
                     help="enable/disable a lever (omit to show current config)")
-    pc.add_argument("kind", nargs="?", help="pdf|image|log|json|notebook|csv|diff|redact")
+    pc.add_argument("kind", nargs="?",
+                    help="pdf|image|log|json|ndjson|notebook|csv|diff|code|lockfile|minified|redact")
     pc.add_argument("--json", action="store_true")
 
     from .install import AGENTS
@@ -125,6 +133,15 @@ def main(argv=None) -> int:
         sp.add_argument("--json", action="store_true")
 
     args = p.parse_args(argv)
+
+    if args.cmd == "discover":
+        from .discover import discover, format_report
+        report = discover(root=args.root)
+        if args.json:
+            print(json.dumps(report))
+        else:
+            print(format_report(report))
+        return 0
 
     if args.cmd == "stats":
         led = cache.read_ledger()

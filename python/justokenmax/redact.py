@@ -39,8 +39,37 @@ def _mask(s: str) -> str:
     return s[:4] + "…" + s[-4:]  # keep a recognizable prefix/suffix
 
 
+def mask_secrets(text: str) -> Tuple[str, int]:
+    """Mask recognizable secret tokens and `key = value` secrets in `text`.
+
+    Safety-only (no blob elision), so it is cheap and side-effect-free enough to
+    run UNCONDITIONALLY before any digest is stored — a live API key or password
+    must never reach a cache artifact, even when the optional `redact` token-
+    cutting pass is disabled. Returns (masked_text, n_secrets_masked).
+    """
+    n = 0
+
+    def _secret(m):
+        nonlocal n
+        n += 1
+        return _mask(m.group(0))
+
+    for pat in _SECRET_PATTERNS:
+        text = pat.sub(_secret, text)
+
+    def _kv(m):
+        nonlocal n
+        n += 1
+        return m.group(1) + m.group(2) + m.group(3) + _mask(m.group(4)) + m.group(3)
+
+    text = _KV_SECRET.sub(_kv, text)
+    return text, n
+
+
 def redact(text: str) -> Tuple[str, dict]:
-    """Return (redacted_text, stats)."""
+    """Return (redacted_text, stats): elide base64 blobs/data-URIs AND mask
+    secrets. The blob elision is the token-cutting half; secret masking reuses
+    `mask_secrets` so the same safety pass runs whether or not blobs are elided."""
     counts = {"blobs": 0, "secrets": 0}
 
     def _datauri(m):
@@ -54,18 +83,7 @@ def redact(text: str) -> Tuple[str, dict]:
     text = _DATA_URI.sub(_datauri, text)
     text = _B64_BLOB.sub(_blob, text)
 
-    def _secret(m):
-        counts["secrets"] += 1
-        return _mask(m.group(0))
-
-    for pat in _SECRET_PATTERNS:
-        text = pat.sub(_secret, text)
-
-    def _kv(m):
-        counts["secrets"] += 1
-        return m.group(1) + m.group(2) + m.group(3) + _mask(m.group(4)) + m.group(3)
-
-    text = _KV_SECRET.sub(_kv, text)
+    text, counts["secrets"] = mask_secrets(text)
 
     stats = {
         "kind": "redact",

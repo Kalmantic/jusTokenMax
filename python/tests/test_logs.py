@@ -51,3 +51,42 @@ def test_small_log_passthrough_shape():
     digest, stats = compress_log("line one\nline two\n")
     assert "line one" in digest and "line two" in digest
     assert stats["kind"] == "log"
+
+
+def _lint_log(n=5000):
+    """A long lint/typecheck log: the same complaint on thousands of files."""
+    lines = ["INFO: type-checking project"]
+    for i in range(n):
+        lines.append(
+            f'src/pkg/module{i}.py:{i % 90 + 1}:{i % 12 + 1}: '
+            'error: Name "foo" is not defined  [name-defined]')
+    lines += ["Found errors", "FAILED"]
+    return "\n".join(lines)
+
+
+def test_repetitive_lint_lines_group_to_signature():
+    raw = _lint_log()
+    digest, stats = compress_log(raw)
+    # 5000 near-identical lines collapse to a handful of grouped rows.
+    assert stats["lines_after"] < 60
+    assert "(×" in digest                            # grouped marker present
+    # The grouped row carries the count of the dominant signature.
+    rows = [ln for ln in digest.splitlines() if "(×" in ln]
+    assert rows, "expected at least one grouped signature row"
+    assert any("name-defined" in r for r in rows)
+    # Paths and line numbers are normalized away in the signature.
+    assert any("<path>" in r or "<n>" in r for r in rows)
+
+
+def test_grouping_keeps_distinct_signatures_separate():
+    lines = ["INFO start"]
+    lines += [f"src/a{i}.py:{i}: error: undefined name 'x'" for i in range(40)]
+    lines += [f"src/b{i}.py:{i}: warning: unused import 'os'" for i in range(40)]
+    lines += [f"filler line {i}" for i in range(40)]
+    lines += ["done"]
+    digest, _ = compress_log("\n".join(lines))
+    # Two distinct complaint signatures -> two distinct grouped rows.
+    assert "undefined name 'x'" in digest
+    assert "unused import 'os'" in digest
+    rows = [ln for ln in digest.splitlines() if "(×" in ln]
+    assert len(rows) >= 2
