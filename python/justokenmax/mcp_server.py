@@ -134,7 +134,10 @@ TOOLS = [
                        "extensions (the compressor backlog).",
         "inputSchema": {
             "type": "object",
-            "properties": {"root": {"type": "string"}},
+            "properties": {
+                "root": {"type": "string"},
+                "newer_than_days": {"type": "number"},
+            },
         },
     },
 ]
@@ -199,8 +202,13 @@ def _tool_stats(args):
 
 
 def _tool_discover(args):
-    from justokenmax.discover import discover
-    return json.dumps(discover(root=args.get("root")))
+    from justokenmax.discover import (discover, format_report, load_last_report,
+                                      save_report)
+    report = discover(root=args.get("root"),
+                      newer_than_days=args.get("newer_than_days"))
+    summary = format_report(report, previous=load_last_report())
+    save_report(report)
+    return summary
 
 
 DISPATCH = {

@@ -103,6 +103,9 @@ def main(argv=None) -> int:
                                 "+ the unsupported-extension backlog")
     pdisc.add_argument("--root", default=None,
                        help="history dir (default: ~/.claude/projects)")
+    pdisc.add_argument("--newer-than-days", type=float, default=None,
+                       help="only survey session logs touched in the last N days "
+                            "(the weekly flywheel view)")
     pdisc.add_argument("--json", action="store_true")
 
     sub.add_parser("stats").add_argument("--json", action="store_true")
@@ -135,12 +138,14 @@ def main(argv=None) -> int:
     args = p.parse_args(argv)
 
     if args.cmd == "discover":
-        from .discover import discover, format_report
-        report = discover(root=args.root)
+        from .discover import (discover, format_report, load_last_report,
+                               save_report)
+        report = discover(root=args.root, newer_than_days=args.newer_than_days)
         if args.json:
             print(json.dumps(report))
         else:
-            print(format_report(report))
+            print(format_report(report, previous=load_last_report()))
+        save_report(report)
         return 0
 
     if args.cmd == "stats":
