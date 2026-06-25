@@ -41,12 +41,79 @@ _VOLATILE = re.compile(
     r"\[\d{2}:\d{2}:\d{2}[.,\d]*\]|\d+ms|\(\d+/\d+\))\s*"
 )
 
+# Volatile tokens that distinguish otherwise-identical lint/type/error lines:
+# file paths, line:col positions, hex/pointers, UUIDs, and bare numbers. Stripped
+# to build a normalized *signature* so the same complaint groups regardless of
+# which file/line it fired on. Order matters (UUID/hex before plain numbers).
+_SIG_SUBS = (
+    (re.compile(r"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
+                r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b"), "<uuid>"),
+    (re.compile(r"\b0x[0-9a-fA-F]+\b"), "<hex>"),
+    (re.compile(r"\b[0-9a-fA-F]{16,}\b"), "<hex>"),
+    # path-like tokens (with a slash and an extension or directory separator)
+    (re.compile(r"(?:[\w.\-]+/)+[\w.\-]+"), "<path>"),
+    # remaining ":line:col" or ":line" positions
+    (re.compile(r":\d+(?::\d+)?\b"), ":<n>"),
+    (re.compile(r"\b\d+\b"), "<n>"),
+)
+
 HEAD_LINES = 12
 TAIL_LINES = 20
+
+# Below this many same-signature notable lines we keep them verbatim; at or above
+# we collapse to "<signature> (×N)" plus a couple of concrete examples.
+_GROUP_MIN = 3
+_GROUP_EXAMPLES = 2
 
 
 def _dedup_key(line: str) -> str:
     return _VOLATILE.sub("", line).strip()
+
+
+def _signature(line: str) -> str:
+    """Normalize a line into a path/number-free signature for grouping."""
+    sig = _ANSI.sub("", line)
+    for pat, repl in _SIG_SUBS:
+        sig = pat.sub(repl, sig)
+    return re.sub(r"\s+", " ", sig).strip()
+
+
+def _group_notable(lines: list) -> list:
+    """Bucket notable lines by normalized signature.
+
+    Runs of >= _GROUP_MIN lines sharing a signature collapse to a single
+    "<signature>  (×N)" row plus a couple of verbatim examples; everything else
+    is emitted unchanged and in order. Stable: a signature is materialized at the
+    position of its first occurrence.
+    """
+    counts: dict = {}
+    examples: dict = {}
+    order = []
+    for ln in lines:
+        sig = _signature(ln)
+        if sig not in counts:
+            counts[sig] = 0
+            examples[sig] = []
+            order.append(sig)
+        counts[sig] += 1
+        if len(examples[sig]) < _GROUP_EXAMPLES:
+            examples[sig].append(ln)
+
+    out = []
+    emitted = set()
+    for ln in lines:
+        sig = _signature(ln)
+        n = counts[sig]
+        if n < _GROUP_MIN:
+            out.append(ln)
+            continue
+        if sig in emitted:
+            continue
+        emitted.add(sig)
+        for ex in examples[sig]:
+            out.append(ex)
+        out.append(f"    {sig}  (×{n})")
+    return out
 
 
 def compress_log(text: str, head: int = HEAD_LINES, tail: int = TAIL_LINES
@@ -83,8 +150,12 @@ def compress_log(text: str, head: int = HEAD_LINES, tail: int = TAIL_LINES
         head_block = collapsed[:head]
         tail_block = collapsed[-tail:]
         middle = collapsed[head:-tail]
-        kept_mid = [ln for ln in middle if notable(ln)]
-        elided = len(middle) - len(kept_mid)
+        notable_mid = [ln for ln in middle if notable(ln)]
+        elided = len(middle) - len(notable_mid)
+        # Bucket repetitive notable lines (lint/typecheck/error spam) by a
+        # normalized signature so 5000 near-identical complaints become a few
+        # "<signature> (×N)" rows instead of 5000 verbatim lines.
+        kept_mid = _group_notable(notable_mid)
         kept = list(head_block)
         if elided:
             kept.append(f"    --- {elided} routine lines hidden ---")

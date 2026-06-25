@@ -112,7 +112,7 @@ def main(argv=None) -> int:
     pc.add_argument("action", nargs="?", choices=("enable", "disable"),
                     help="enable/disable a lever (omit to show current config)")
     pc.add_argument("kind", nargs="?",
-                    help="pdf|image|log|json|notebook|csv|diff|code|lockfile|minified|redact")
+                    help="pdf|image|log|json|ndjson|notebook|csv|diff|code|lockfile|minified|redact")
     pc.add_argument("--json", action="store_true")
 
     from .install import AGENTS

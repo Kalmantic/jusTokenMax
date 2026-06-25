@@ -78,6 +78,28 @@ def test_json_dispatch_compresses(big_json):
     assert res.tokens_saved > 0
 
 
+def test_ndjson_dispatch_groups_by_shape(big_ndjson):
+    res = optimize(big_ndjson)
+    assert res.ok and res.kind == "ndjson"
+    assert res.output.endswith(".ndjson.txt")
+    assert res.tokens_saved > 0
+    digest = Path(res.output).read_text(encoding="utf-8")
+    assert "[800 × {level,msg,ts}]" in digest
+    assert "[300 × {code,err,level,ts}]" in digest
+
+
+def test_ndjson_second_run_cache_hit(big_ndjson):
+    first = optimize(big_ndjson)
+    second = optimize(big_ndjson)
+    assert first.cached is False and second.cached is True
+    assert second.output == first.output
+
+
+def test_ndjson_retrieve_returns_original(big_ndjson):
+    res = optimize(big_ndjson)
+    assert cache.lookup_origin(res.output) == big_ndjson
+
+
 def test_content_sniff_routes_txt_to_json(tmp_path):
     import json as _json
     p = tmp_path / "payload.txt"               # generic extension

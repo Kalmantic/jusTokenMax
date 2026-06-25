@@ -178,6 +178,95 @@ def _schema_node(node):
     return node
 
 
+def _shape(node) -> str:
+    """A compact, deterministic description of a record's shape.
+
+    Objects are summarized by their sorted key set, lists/scalars by type. This
+    is the grouping key for NDJSON: records with the same shape are bucketed and
+    counted instead of dumped one by one.
+    """
+    if isinstance(node, dict):
+        return "{" + ",".join(sorted(node)) + "}"
+    if isinstance(node, list):
+        return "[]"
+    if node is None:
+        return "null"
+    if isinstance(node, bool):
+        return "bool"
+    if isinstance(node, (int, float)):
+        return "num"
+    return type(node).__name__
+
+
+def compress_ndjson(text: str, sample: int = SAMPLE, max_str: int = MAX_STR,
+                    max_depth: int = MAX_DEPTH) -> Tuple[str, dict]:
+    """Compress newline-delimited JSON (one JSON value per line).
+
+    A whole-file ``json.loads`` fails on NDJSON, so parse line by line, bucket
+    records by their SHAPE (sorted key set), and emit one
+    ``[N × {shape}]`` summary per shape with a couple of representative,
+    individually-shrunk examples. Malformed lines are tolerated (collected under
+    a "<malformed>" bucket) so a single bad line never sinks the whole file.
+
+    Returns (digest, stats). ``stats['ok']`` is False when no line parsed.
+    """
+    shapes = []                 # preserve first-seen order
+    counts: dict = {}
+    examples: dict = {}
+    parsed = 0
+    malformed = 0
+    for line in text.split("\n"):
+        s = line.strip()
+        if not s:
+            continue
+        try:
+            rec = json.loads(s)
+        except (ValueError, TypeError):
+            malformed += 1
+            key = "<malformed>"
+            ex = s[:max_str]
+        else:
+            parsed += 1
+            key = _shape(rec)
+            ex = rec
+        if key not in counts:
+            counts[key] = 0
+            examples[key] = []
+            shapes.append(key)
+        counts[key] += 1
+        if len(examples[key]) < sample:
+            examples[key].append(ex)
+
+    if parsed == 0 and malformed == 0:
+        return text, {"kind": "ndjson", "ok": False, "note": "empty"}
+    if parsed == 0:
+        return text, {"kind": "ndjson", "ok": False, "note": "no valid JSON"}
+
+    out_lines = []
+    for key in shapes:
+        n = counts[key]
+        out_lines.append(f"[{n} × {key}]")
+        for ex in examples[key]:
+            if key == "<malformed>":
+                out_lines.append(f"  {ex}")
+            else:
+                shrunk = _shrink(ex, 0, sample, max_str, max_depth)
+                out_lines.append(
+                    "  " + json.dumps(shrunk, separators=(",", ":"),
+                                      ensure_ascii=False))
+    digest = "\n".join(out_lines) + "\n"
+    stats = {
+        "kind": "ndjson",
+        "ok": True,
+        "records": parsed + malformed,
+        "shapes": len(shapes),
+        "malformed": malformed,
+        "bytes_before": len(text),
+        "bytes_after": len(digest),
+    }
+    return digest, stats
+
+
 def compress_json(text: str, sample: int = SAMPLE, max_str: int = MAX_STR,
                   max_depth: int = MAX_DEPTH,
                   schema: bool = False) -> Tuple[str, dict]:

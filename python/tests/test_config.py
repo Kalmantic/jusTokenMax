@@ -36,6 +36,12 @@ def test_optimize_skips_disabled_kind(big_log, monkeypatch):
     assert res.ok is False and res.note == "disabled by config"
 
 
+def test_optimize_skips_disabled_ndjson(big_ndjson, monkeypatch):
+    monkeypatch.setenv("JUSTOKENMAX_DISABLE", "ndjson")
+    res = optimize(big_ndjson)
+    assert res.ok is False and res.note == "disabled by config"
+
+
 def test_disabling_redact_leaves_secret(big_log, monkeypatch):
     monkeypatch.setenv("JUSTOKENMAX_DISABLE", "redact")
     res = optimize(big_log)

@@ -107,6 +107,20 @@ def big_json(tmp_path):
 
 
 @pytest.fixture
+def big_ndjson(tmp_path):
+    """Newline-delimited JSON event log of a few record shapes."""
+    import json
+    lines = [json.dumps({"ts": i, "level": "info", "msg": f"event {i}"})
+             for i in range(800)]
+    lines += [json.dumps({"ts": i, "level": "error", "code": 500, "err": "boom"})
+              for i in range(300)]
+    lines.append("{ this line is not valid json")   # tolerated
+    p = tmp_path / "events.ndjson"
+    p.write_text("\n".join(lines) + "\n")
+    return str(p)
+
+
+@pytest.fixture
 def big_log(tmp_path):
     lines = ["INFO starting"]
     lines += [f"compiling module {i}" for i in range(400)]

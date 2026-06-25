@@ -13,7 +13,10 @@ from .tokens import pdf_image_tokens, text_tokens
 PDF_EXTS = {".pdf"}
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
 LOG_EXTS = {".log"}
-JSON_EXTS = {".json", ".ndjson"}
+JSON_EXTS = {".json"}
+# Newline-delimited JSON: a whole-file json.loads fails, so it needs its own
+# line-by-line, shape-grouping path (see jsoncompress.compress_ndjson).
+NDJSON_EXTS = {".ndjson", ".jsonl"}
 NB_EXTS = {".ipynb"}
 CSV_EXTS = {".csv", ".tsv"}
 DIFF_EXTS = {".diff", ".patch"}
@@ -41,6 +44,8 @@ LOG_MIN_BYTES = 8 * 1024
 JSON_MIN_BYTES = 4 * 1024
 # Above this a JSON blob is collapsed to an inferred schema rather than sampled.
 JSON_SCHEMA_BYTES = 256 * 1024
+# Below this an NDJSON stream isn't worth grouping.
+NDJSON_MIN_BYTES = 4 * 1024
 # Below this a CSV is small enough to read whole.
 CSV_MIN_BYTES = 4 * 1024
 
@@ -131,6 +136,8 @@ def _kind_for(path: str) -> str:
         return "log"
     if ext in JSON_EXTS:
         return "json"
+    if ext in NDJSON_EXTS:
+        return "ndjson"
     if ext in NB_EXTS:
         return "notebook"
     if ext in CSV_EXTS:
@@ -251,6 +258,33 @@ def optimize(
                              note=f"{stats.get('mode', 'sample')}: "
                                   f"{stats['bytes_before']//1024}KB -> "
                                   f"{stats['bytes_after']//1024}KB")
+
+    elif kind == "ndjson":
+        if os.path.getsize(path) < NDJSON_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="ndjson already small")
+        key, out = cache.cache_paths(path, opts, ".ndjson.txt")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "ndjson", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .jsoncompress import compress_ndjson
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        digest, stats = compress_ndjson(raw)
+        if not stats.get("ok"):
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="not NDJSON")
+        digest = _redact(digest)
+        out.write_text(digest, encoding="utf-8")
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        meta = {"tokens_before": tokens_before, "tokens_after": tokens_after}
+        cache.save_meta(key, meta)
+        res = OptimizeResult(True, "ndjson", path, str(out), tokens_before,
+                             tokens_after, cached=False,
+                             note=f"{stats['records']} records, "
+                                  f"{stats['shapes']} shapes")
 
     elif kind == "lockfile":
         key, out = cache.cache_paths(path, opts, ".lock.txt")
