@@ -18,6 +18,9 @@ dependencies = [
 [project.optional-dependencies]
 # Better table extraction. Optional because it pulls in a heavier stack.
 tables = ["pdfplumber>=0.11"]
+# Accurate token counting via the real tokenizer. Optional so the base install
+# stays light; tokens.py silently falls back to len//4 when it is absent.
+accurate = ["tiktoken>=0.7"]
 
 [project.scripts]
 justokenmax = "justokenmax.cli:main"

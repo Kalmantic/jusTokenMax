@@ -1,12 +1,47 @@
 """Rough token estimators, used only to report savings.
 
-These are deliberately simple and dependency-free. The point is a defensible
-before/after number, not accounting-grade precision. Constants follow
-Anthropic's published guidance for image tokens (~ width*height / 750) and the
-common ~4 chars/token rule for text.
+These are deliberately simple. The point is a defensible before/after number,
+not accounting-grade precision. Constants follow Anthropic's published guidance
+for image tokens (~ width*height / 750) and the common ~4 chars/token rule for
+text.
+
+Text counting prefers tiktoken (o200k_base) when the optional `accurate` extra
+is installed; otherwise it falls back to the ~4 chars/token heuristic. The image
+estimators are intentionally left alone — they follow Anthropic's image formula.
 """
 
 from __future__ import annotations
+
+# Optional accurate tokenizer. Guarded so the base install (pypdf + Pillow only)
+# never imports it, and a missing/broken tiktoken silently degrades to len//4.
+try:  # pragma: no cover - import availability is environment-dependent
+    import tiktoken
+except Exception:  # noqa: BLE001 - any import failure means "not available"
+    tiktoken = None
+
+_ENCODER = None  # cached encoder; None means "fall back to len//4"
+_ENCODER_TRIED = False  # so a one-time failed lookup isn't retried each call
+
+
+def _encoder():
+    """Return a cached tiktoken encoder, or None if unavailable.
+
+    Tries o200k_base (current Claude/GPT family) and falls back to cl100k_base.
+    Any failure caches None so we don't pay the lookup cost repeatedly.
+    """
+    global _ENCODER, _ENCODER_TRIED
+    if _ENCODER_TRIED:
+        return _ENCODER
+    _ENCODER_TRIED = True
+    if tiktoken is None:
+        return None
+    for name in ("o200k_base", "cl100k_base"):
+        try:
+            _ENCODER = tiktoken.get_encoding(name)
+            return _ENCODER
+        except Exception:  # noqa: BLE001 - try the next encoding / give up
+            continue
+    return None
 
 # Long-edge ceiling Claude resizes images to before tokenizing. Anything larger
 # is downscaled by the API anyway, so shipping bigger pixels just wastes bytes.
@@ -21,7 +56,18 @@ PDF_PAGE_IMAGE_TOKENS = 1500
 
 
 def text_tokens(text: str) -> int:
-    """Estimate tokens for a chunk of text (~4 chars/token). Always >= 1."""
+    """Estimate tokens for a chunk of text.
+
+    Uses tiktoken (o200k_base) when the optional `accurate` extra is installed,
+    which counts punctuation/symbol-dense text more faithfully. Falls back to the
+    ~4 chars/token heuristic when tiktoken is absent or errors. Always >= 1.
+    """
+    enc = _encoder()
+    if enc is not None:
+        try:
+            return max(1, len(enc.encode(text)))
+        except Exception:  # noqa: BLE001 - never raise from a counting helper
+            pass
     return max(1, len(text) // 4)
 
 
