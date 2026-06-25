@@ -9,7 +9,7 @@ from typing import Optional
 
 from . import cache
 from .config import is_enabled
-from .redact import redact
+from .redact import mask_secrets, redact
 from .tokens import pdf_image_tokens, text_tokens
 
 PDF_EXTS = {".pdf"}
@@ -81,16 +81,18 @@ class OptimizeResult:
 
 
 def _redact(text: str) -> str:
-    """Strip base64 blobs / data-URIs and mask secrets in a text digest.
+    """Sanitize a text digest before it is written to the cache artifact.
 
-    Every text digest is routed through here before it is written to the cache
-    artifact, so secrets in source/config files never reach stored output. The
-    `redact`/`is_enabled` imports are module-level (not lazy) so this sanitizer
-    is visible to static dataflow analysis on the write paths in `optimize()`.
+    Secret masking (API keys, tokens, JWTs, password=/secret= pairs) runs
+    UNCONDITIONALLY — a live credential must never be stored, even when the
+    optional `redact` token-cutting pass (base64 / data-URI elision) is
+    disabled. So every write path in `optimize()` is sanitized regardless of
+    config. The imports are module-level (not lazy) so this is visible to
+    static dataflow analysis.
     """
-    if not is_enabled("redact"):
-        return text
-    return redact(text)[0]
+    if is_enabled("redact"):
+        return redact(text)[0]          # full pass: blob elision + secret mask
+    return mask_secrets(text)[0]        # safety only: always mask secrets
 
 
 def _sniff(path: str) -> str:

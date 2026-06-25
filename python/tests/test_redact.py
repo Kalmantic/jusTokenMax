@@ -1,4 +1,4 @@
-from justokenmax.redact import redact
+from justokenmax.redact import mask_secrets, redact
 
 
 def test_elides_base64_blob():
@@ -41,3 +41,24 @@ def test_plain_text_untouched():
     clean, st = redact("just normal text with no secrets")
     assert clean == "just normal text with no secrets"
     assert st["secrets_masked"] == 0 and st["blobs_elided"] == 0
+
+
+def test_mask_secrets_masks_without_eliding_blobs():
+    # mask_secrets is the safety-only half: it masks secrets but leaves base64
+    # blobs in place (no token-cutting elision).
+    secret = "s" + "k-" + "Z" * 22
+    blob = "A" * 400
+    clean, n = mask_secrets(f"key={secret} blob={blob}")
+    assert secret not in clean and n >= 1
+    assert blob in clean                      # blob NOT elided by mask_secrets
+
+
+def test_optimize_redact_masks_secrets_even_when_redact_disabled(monkeypatch):
+    # Security regression: even with the `redact` kind disabled, a live secret
+    # must never be written to a cache artifact. _redact falls back to
+    # mask_secrets rather than returning the text untouched.
+    from justokenmax import optimize
+    monkeypatch.setattr(optimize, "is_enabled", lambda kind: False)
+    secret = "AK" + "IA" + "Z" * 16          # AWS access key id shape
+    out = optimize._redact(f"aws_key = {secret}")
+    assert secret not in out                  # masked despite redact disabled
