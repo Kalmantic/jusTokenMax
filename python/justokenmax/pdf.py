@@ -18,6 +18,12 @@ MAX_OUTPUT_CHARS = 5_000_000  # ~1.25M tokens of text; well past any real doc
 
 _TRUNCATED = "\n\n> _[justokenmax: output truncated — document exceeds safety caps]_\n"
 
+# Raster images (logos, charts, diagrams) are dropped — we extract text only.
+# Leaving a per-page marker so a reader/agent knows visual content existed and
+# can read the source page if it matters, instead of silently losing it.
+_IMG_NOTE = ("\n> _[justokenmax: {n} image(s) on this page not extracted — "
+             "read the source page if visual data matters]_")
+
 
 def _clean(text: str) -> str:
     lines = [ln.rstrip() for ln in text.splitlines()]
@@ -82,6 +88,8 @@ def _with_pdfplumber(path: str) -> Tuple[str, int]:
                 if md:
                     chars += len(md)
                     parts.append("\n" + md)
+            if page.images:
+                parts.append(_IMG_NOTE.format(n=len(page.images)))
             parts.append("")
     return _assemble(parts, n_pages, truncated)
 
@@ -102,6 +110,14 @@ def _with_pypdf(path: str) -> Tuple[str, int]:
         cleaned = _clean(page.extract_text() or "")
         chars += len(cleaned)
         parts.append(cleaned)
+        # pypdf decodes image XObjects on access and can raise on exotic
+        # filters; stay fail-open and just skip the marker if so.
+        try:
+            n_img = len(page.images)
+        except Exception:
+            n_img = 0
+        if n_img:
+            parts.append(_IMG_NOTE.format(n=n_img))
         parts.append("")
     return _assemble(parts, n_pages, truncated)
 
