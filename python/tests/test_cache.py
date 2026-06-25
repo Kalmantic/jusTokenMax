@@ -1,11 +1,9 @@
 """Audited reversible redaction: sidecar map storage, unmask + audit log, and
 the guarantee that the default (irreversible) path is unchanged."""
 
-import importlib
 import json
 import os
-
-import pytest
+from pathlib import Path
 
 from justokenmax import cache
 from justokenmax.redact import redact_with_map
@@ -75,7 +73,7 @@ def test_audited_optimize_writes_map_but_keeps_digest_secret_safe(
     from justokenmax.optimize import optimize
     res = optimize(big_log)
     assert res.ok and res.output
-    digest = open(res.output, encoding="utf-8").read()
+    digest = Path(res.output).read_text(encoding="utf-8")
     secret = "s" + "k-" + "L" * 22          # the token planted in big_log
     # The original secret must NOT be in the digest...
     assert secret not in digest
