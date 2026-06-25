@@ -1,0 +1,28 @@
+# Models jusTokenMax's redaction helpers as sanitizers.
+#
+# `redact.redact(text) -> (clean_text, stats)` masks secrets (API keys, tokens,
+# JWTs, base64 blobs, password=/secret= pairs); `optimize._redact(text)` wraps
+# it and returns the cleaned text. Every digest written to a cache artifact in
+# optimize.py is passed through one of these first, so the file content -> write
+# flow is sanitized. We register both so CodeQL's `clear-text-storage` (and
+# other taint queries) stop reporting those writes.
+#
+# summaryModel rows: package; type; subtypes; name; signature; ext;
+#   input; output; kind; provenance
+# A "taint"/"sanitize" style summary with no taint output means the return
+# value is clean regardless of the (tainted) argument.
+
+extensions:
+  - addsTo:
+      pack: codeql/python-all
+      extensible: sourceModel
+    data: []
+
+  - addsTo:
+      pack: codeql/python-all
+      extensible: summaryModel
+    data:
+      # optimize._redact(text) -> sanitized str (no taint propagated arg->return)
+      - ["justokenmax.optimize", "Member[_redact]", "", "", "Argument[0]", "ReturnValue", "sanitize", "manual"]
+      # redact.redact(text) -> (sanitized str, stats); element 0 is clean
+      - ["justokenmax.redact", "Member[redact]", "", "", "Argument[0]", "ReturnValue.Element[0]", "sanitize", "manual"]

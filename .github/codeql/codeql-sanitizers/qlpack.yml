@@ -1,0 +1,10 @@
+name: justokenmax/codeql-sanitizers
+version: 0.0.1
+library: true
+# Model pack: data extensions that register jusTokenMax's redaction helpers as
+# sanitizers for the CodeQL Python taint-tracking library, so flows that pass
+# through redaction before storage are not reported as clear-text-storage.
+extensionTargets:
+  codeql/python-all: "*"
+dataExtensions:
+  - models/*.yml

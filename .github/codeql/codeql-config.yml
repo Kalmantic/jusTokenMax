@@ -1,0 +1,15 @@
+name: "jusTokenMax CodeQL config"
+
+# Run the default security+quality suite, plus a local model pack that teaches
+# the Python dataflow library to treat our redaction helpers as sanitizers.
+# Without this, `py/clear-text-storage-sensitive-data` flags the cache-artifact
+# writes in optimize.py — but every digest is passed through `_redact` (which
+# masks API keys, tokens, JWTs, base64 blobs and `secret=`/`password=` pairs)
+# before it is written, so those flows are false positives.
+
+queries:
+  - uses: security-and-quality
+
+packs:
+  python:
+    - justokenmax/codeql-sanitizers
