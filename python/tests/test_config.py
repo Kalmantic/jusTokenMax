@@ -43,6 +43,20 @@ def test_disabling_redact_leaves_secret(big_log, monkeypatch):
     assert "L" * 22 in digest          # secret NOT masked when redact disabled
 
 
+def test_max_read_tokens_default():
+    assert cfg.max_read_tokens() == cfg.DEFAULT_MAX_READ_TOKENS
+
+
+def test_max_read_tokens_env_override(monkeypatch):
+    monkeypatch.setenv("JUSTOKENMAX_MAX_READ_TOKENS", "500")
+    assert cfg.max_read_tokens() == 500
+
+
+def test_max_read_tokens_bad_env_falls_back(monkeypatch):
+    monkeypatch.setenv("JUSTOKENMAX_MAX_READ_TOKENS", "not-a-number")
+    assert cfg.max_read_tokens() == cfg.DEFAULT_MAX_READ_TOKENS
+
+
 def test_summary_shape():
     s = cfg.summary()
     assert set(s["kinds"]) == set(cfg.KINDS)
