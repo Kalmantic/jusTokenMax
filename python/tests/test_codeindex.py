@@ -69,3 +69,83 @@ def test_format_hits_compact(sample_repo):
     codeindex.build_index(sample_repo)
     out = codeindex.format_hits(codeindex.query(sample_repo, "parse_config"))
     assert "core.py:1" in out and "[func]" in out
+
+
+# --------------------------- .gitignore awareness ------------------------- #
+def test_gitignore_excludes_files_and_dirs(tmp_path):
+    (tmp_path / "keep.py").write_text("def keep_me(): pass\n")
+    (tmp_path / "generated.py").write_text("def generated_sym(): pass\n")
+    (tmp_path / "buildout").mkdir()
+    (tmp_path / "buildout" / "g.py").write_text("def vendored_sym(): pass\n")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "app.py").write_text("def app_sym(): pass\n")
+    (tmp_path / ".gitignore").write_text("generated.py\nbuildout/\n")
+
+    idx = codeindex.build_index(str(tmp_path))
+    names = {s["name"] for s in idx["symbols"]}
+    assert "keep_me" in names
+    assert "app_sym" in names
+    assert "generated_sym" not in names   # file-pattern ignored
+    assert "vendored_sym" not in names     # dir-pattern pruned
+
+
+def test_gitignore_glob_pattern(tmp_path):
+    (tmp_path / "real.py").write_text("def real_fn(): pass\n")
+    (tmp_path / "thing.gen.py").write_text("def gen_fn(): pass\n")
+    (tmp_path / ".gitignore").write_text("*.gen.py\n")
+    idx = codeindex.build_index(str(tmp_path))
+    names = {s["name"] for s in idx["symbols"]}
+    assert "real_fn" in names and "gen_fn" not in names
+
+
+# --------------------------- incremental rebuild -------------------------- #
+def test_build_index_reuses_cache_for_unchanged(tmp_path, monkeypatch):
+    (tmp_path / "a.py").write_text("def alpha(): pass\n")
+    (tmp_path / "b.py").write_text("def beta(): pass\n")
+
+    calls = []
+    real_parse = codeindex.parse_file
+
+    def spy(path, rel, lang):
+        calls.append(rel)
+        return real_parse(path, rel, lang)
+
+    monkeypatch.setattr(codeindex, "parse_file", spy)
+
+    codeindex.build_index(str(tmp_path))
+    first = sorted(c for c in calls if c.endswith(".py"))
+    assert "a.py" in first and "b.py" in first
+
+    # Nothing changed: a second build must NOT re-parse either file.
+    calls.clear()
+    idx = codeindex.build_index(str(tmp_path))
+    assert calls == []
+    names = {s["name"] for s in idx["symbols"]}
+    assert {"alpha", "beta"} <= names
+
+
+def test_build_index_reparses_only_changed(tmp_path, monkeypatch):
+    fa = tmp_path / "a.py"
+    fb = tmp_path / "b.py"
+    fa.write_text("def alpha(): pass\n")
+    fb.write_text("def beta(): pass\n")
+    codeindex.build_index(str(tmp_path))
+
+    calls = []
+    real_parse = codeindex.parse_file
+
+    def spy(path, rel, lang):
+        calls.append(rel)
+        return real_parse(path, rel, lang)
+
+    monkeypatch.setattr(codeindex, "parse_file", spy)
+
+    # Bump only b.py's mtime + content; a.py must come from cache.
+    st = os.stat(str(fb))
+    fb.write_text("def beta(): pass\ndef gamma(): pass\n")
+    os.utime(str(fb), (st.st_atime + 10, st.st_mtime + 10))
+
+    idx = codeindex.build_index(str(tmp_path))
+    assert calls == ["b.py"]
+    names = {s["name"] for s in idx["symbols"]}
+    assert {"alpha", "beta", "gamma"} <= names

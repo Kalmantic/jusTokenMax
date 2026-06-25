@@ -114,3 +114,28 @@ def record_origin(artifact: str, source: str) -> None:
 def lookup_origin(artifact: str) -> Optional[str]:
     """Return the original path for an optimized artifact, or None."""
     return _load_origins().get(os.path.abspath(artifact))
+
+
+def _index_cache_path(root: str) -> pathlib.Path:
+    """A per-root cache of parsed symbols so the index can rebuild incrementally."""
+    key = hashlib.sha256(os.path.abspath(root).encode()).hexdigest()[:16]
+    return CACHE_DIR / f"index-{key}.json"
+
+
+def load_index_cache(root: str) -> dict:
+    """Return {rel_path: {"mtime": float, "symbols": [...]}} for `root`, or {}."""
+    p = _index_cache_path(root)
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except (json.JSONDecodeError, OSError):
+            return {}
+    return {}
+
+
+def save_index_cache(root: str, entries: dict) -> None:
+    """Persist the per-file parsed-symbol cache for `root`."""
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    _harden(ROOT)
+    _harden(CACHE_DIR)
+    _index_cache_path(root).write_text(json.dumps(entries))

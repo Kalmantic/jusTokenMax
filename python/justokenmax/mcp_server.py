@@ -126,6 +126,17 @@ TOOLS = [
         "description": "Lifetime token-savings ledger.",
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "justokenmax_discover",
+        "description": "Survey Claude Code history for recoverable tokens: which "
+                       "already-read files jusTokenMax could have compressed, "
+                       "bucketed by kind/path, plus the most frequent unsupported "
+                       "extensions (the compressor backlog).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"root": {"type": "string"}},
+        },
+    },
 ]
 
 
@@ -187,6 +198,11 @@ def _tool_stats(args):
     return json.dumps(cache.read_ledger())
 
 
+def _tool_discover(args):
+    from justokenmax.discover import discover
+    return json.dumps(discover(root=args.get("root")))
+
+
 DISPATCH = {
     "justokenmax_optimize": _tool_optimize,
     "justokenmax_compress_json": _tool_compress_json,
@@ -198,6 +214,7 @@ DISPATCH = {
     "justokenmax_redact": _tool_redact,
     "justokenmax_retrieve": _tool_retrieve,
     "justokenmax_stats": _tool_stats,
+    "justokenmax_discover": _tool_discover,
 }
 
 

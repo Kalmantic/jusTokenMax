@@ -19,11 +19,14 @@ No heavy parser dependency.
 from __future__ import annotations
 
 import ast
+import fnmatch
 import json
 import os
 import re
 from pathlib import Path
 from typing import List, Optional
+
+from . import cache
 
 INDEX_DIRNAME = ".justokenmax"
 INDEX_FILE = "index.json"
@@ -46,13 +49,85 @@ LANGS = {
 }
 
 
+def _load_gitignore(root: str) -> List[str]:
+    """Read root/.gitignore into a list of patterns (blank/comment lines dropped).
+
+    A small stdlib-only subset: plain globs and dir-suffixed (`build/`) patterns,
+    matched with fnmatch against the repo-relative POSIX path. Negation (`!`) is
+    ignored — we err toward *excluding* generated/vendored files from the index.
+    """
+    gi = os.path.join(root, ".gitignore")
+    if not os.path.isfile(gi):
+        return []
+    patterns: List[str] = []
+    try:
+        for line in Path(gi).read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("!"):
+                continue
+            patterns.append(line)
+    except OSError:
+        return []
+    return patterns
+
+
+def _ignored(rel: str, patterns: List[str], is_dir: bool) -> bool:
+    """True if the repo-relative path `rel` matches any .gitignore pattern.
+
+    Supports the common subset: anchored (`/build`), dir-only (`build/`), and
+    unanchored globs that match a basename or any path segment (`*.gen.py`,
+    `node_modules`). fnmatch over POSIX-joined relatives keeps it stdlib-only.
+    """
+    if not patterns:
+        return False
+    rel = rel.replace(os.sep, "/")
+    base = rel.rsplit("/", 1)[-1]
+    for pat in patterns:
+        anchored = pat.startswith("/")
+        p = pat.lstrip("/")
+        dir_only = p.endswith("/")
+        p = p.rstrip("/")
+        if dir_only and not is_dir:
+            # `foo/` matches only when `foo` is (an ancestor) directory; a file
+            # qualifies only if one of its parent segments matches.
+            if any(fnmatch.fnmatch(seg, p) for seg in rel.split("/")[:-1]):
+                return True
+            continue
+        # full-path match (anchored or with a '/' in the pattern)
+        if fnmatch.fnmatch(rel, p) or fnmatch.fnmatch(rel, p + "/*"):
+            return True
+        # unanchored: match the basename or any path segment at any depth
+        if not anchored:
+            if fnmatch.fnmatch(base, p):
+                return True
+            if "/" not in p and any(fnmatch.fnmatch(seg, p) for seg in rel.split("/")):
+                return True
+    return False
+
+
 def _iter_source_files(root: str):
+    patterns = _load_gitignore(root)
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        rel_dir = os.path.relpath(dirpath, root)
+        rel_dir = "" if rel_dir == "." else rel_dir
+        # Prune skip-dirs and .gitignore'd directories so we never descend in.
+        kept = []
+        for d in dirnames:
+            if d in SKIP_DIRS:
+                continue
+            rel = os.path.join(rel_dir, d) if rel_dir else d
+            if _ignored(rel, patterns, is_dir=True):
+                continue
+            kept.append(d)
+        dirnames[:] = kept
         for fn in filenames:
             ext = os.path.splitext(fn)[1].lower()
-            if ext in LANGS:
-                yield os.path.join(dirpath, fn), LANGS[ext]
+            if ext not in LANGS:
+                continue
+            rel = os.path.join(rel_dir, fn) if rel_dir else fn
+            if _ignored(rel, patterns, is_dir=False):
+                continue
+            yield os.path.join(dirpath, fn), LANGS[ext]
 
 
 # --------------------------------------------------------------------------- #
@@ -399,17 +474,34 @@ def parse_file(path: str, rel: str, lang: str) -> List[dict]:
 # Index build / query
 # --------------------------------------------------------------------------- #
 def build_index(root: str) -> dict:
-    """Walk `root`, extract symbols, write `.justokenmax/index.json`, return it."""
+    """Walk `root`, extract symbols, write `.justokenmax/index.json`, return it.
+
+    Incremental: a per-root cache keyed by {rel: (mtime, symbols)} lets us reuse
+    parsed symbols for unchanged files and only re-parse what the filesystem says
+    has changed (by mtime). Deleted files drop out of the next snapshot.
+    """
     root = os.path.abspath(root)
+    prior = cache.load_index_cache(root)
+    fresh: dict = {}
     symbols: List[dict] = []
     n_files = 0
     for path, lang in _iter_source_files(root):
         rel = os.path.relpath(path, root)
-        syms = parse_file(path, rel, lang)
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            continue
+        cached = prior.get(rel)
+        if cached and cached.get("mtime") == mtime:
+            syms = cached.get("symbols", [])
+        else:
+            syms = parse_file(path, rel, lang)
+        fresh[rel] = {"mtime": mtime, "symbols": syms}
         if syms:
             n_files += 1
             symbols.extend(syms)
 
+    cache.save_index_cache(root, fresh)
     index = {"root": root, "files": n_files, "symbols": symbols}
     out_dir = os.path.join(root, INDEX_DIRNAME)
     os.makedirs(out_dir, exist_ok=True)

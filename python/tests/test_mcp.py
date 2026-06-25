@@ -58,6 +58,13 @@ def test_unknown_method_errors():
     assert resp["error"]["code"] == -32601
 
 
+def test_discover_tool_returns_report(monkeypatch, tmp_path):
+    monkeypatch.setenv("JUSTOKENMAX_HISTORY", str(tmp_path / "absent"))
+    text = _call("justokenmax_discover", {})["content"][0]["text"]
+    rep = json.loads(text)
+    assert "recoverable_tokens" in rep and rep["note"] == "no history dir"
+
+
 def test_cli_mcp_subcommand_runs(monkeypatch):
     import io
     from justokenmax.cli import main
