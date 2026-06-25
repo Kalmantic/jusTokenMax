@@ -54,8 +54,8 @@ def _table(pairs: List[Tuple[str, str]], flavor: str) -> Tuple[str, dict]:
             seen[name] = ver
     rows = sorted(seen.items())
     out = [f"# Lockfile digest ({flavor}) — {len(rows)} packages",
-           "# integrity hashes / resolved URLs dropped; "
-           "`justokenmax retrieve` for full",
+           ("# integrity hashes / resolved URLs dropped; "
+            "`justokenmax retrieve` for full"),
            ""]
     out += [f"{name}@{ver}" if ver else name for name, ver in rows]
     digest = "\n".join(out) + "\n"
@@ -160,7 +160,6 @@ def compress_lockfile(text: str, flavor: str) -> Tuple[str, dict]:
     return text, {"kind": "lockfile", "ok": False, "note": "unknown flavor"}
 
 
-_PNPM_DEP = re.compile(r"^\s{2,}([^\s:][^:]*):\s*$", re.MULTILINE)
 _PNPM_PKG = re.compile(r"^\s+/?(@?[^@\s/][^@\s]*?)@([0-9][^\s:(]*)", re.MULTILINE)
 
 
