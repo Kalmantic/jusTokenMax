@@ -66,8 +66,10 @@ def main(argv=None) -> int:
     for name in ("optimize", "pdf", "image", "logs", "json"):
         sub.add_parser(name, parents=[common]).add_argument("files", nargs="+")
 
-    pr = sub.add_parser("retrieve", help="get the original behind an optimized artifact")
-    pr.add_argument("artifact")
+    pr = sub.add_parser("retrieve",
+                        help="get the original behind an optimized artifact "
+                             "(by artifact path or in-band handle id)")
+    pr.add_argument("artifact", help="artifact path, handle id, or id=<key>")
     pr.add_argument("--json", action="store_true")
 
     pd = sub.add_parser("delta", help="return only what changed since last read")
@@ -317,7 +319,9 @@ def main(argv=None) -> int:
         return 0
 
     if args.cmd == "retrieve":
-        origin = cache.lookup_origin(args.artifact)
+        # Accept an artifact path OR an in-band retrieve handle id / "id=<key>"
+        # / full "<jtm:retrieve ...>" string seen on a compressed digest.
+        origin = cache.resolve_handle_arg(args.artifact)
         if args.json:
             print(json.dumps({"artifact": args.artifact, "origin": origin}))
         elif origin:

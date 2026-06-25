@@ -65,6 +65,23 @@ def test_discover_tool_returns_report(monkeypatch, tmp_path):
     assert "recoverable_tokens" in rep and rep["note"] == "no history dir"
 
 
+def test_retrieve_tool_accepts_inband_id(tmp_path):
+    # Optimize a file, then retrieve its original via the in-band handle id the
+    # agent would have seen on the digest.
+    from justokenmax.optimize import optimize
+    p = tmp_path / "events.ndjson"
+    import json as _json
+    lines = [_json.dumps({"ts": i, "msg": f"e{i}"}) for i in range(800)]
+    p.write_text("\n".join(lines) + "\n")
+    res = optimize(str(p))
+    assert res.handle
+    text = _call("justokenmax_retrieve", {"artifact": res.handle})["content"][0]["text"]
+    assert text == str(p)
+    # Artifact path still works.
+    text2 = _call("justokenmax_retrieve", {"artifact": res.output})["content"][0]["text"]
+    assert text2 == str(p)
+
+
 def test_cli_mcp_subcommand_runs(monkeypatch):
     import io
     from justokenmax.cli import main

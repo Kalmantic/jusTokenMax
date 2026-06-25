@@ -113,8 +113,10 @@ TOOLS = [
     },
     {
         "name": "justokenmax_retrieve",
-        "description": "Given an optimized artifact path, return the original "
-                       "file it was produced from (reverses compression).",
+        "description": "Given an optimized artifact path OR an in-band retrieve "
+                       "handle id (the `id=<key>` you saw on a compressed "
+                       "digest), return the original file it was produced from "
+                       "(reverses compression).",
         "inputSchema": {
             "type": "object",
             "properties": {"artifact": {"type": "string"}},
@@ -189,7 +191,9 @@ def _tool_redact(args):
 
 def _tool_retrieve(args):
     from justokenmax import cache
-    origin = cache.lookup_origin(args["artifact"])
+    # Accept either an artifact path or an in-band handle id / "id=<key>" /
+    # full "<jtm:retrieve ...>" string the agent saw on a digest.
+    origin = cache.resolve_handle_arg(args["artifact"])
     return origin or "no recorded original for that artifact"
 
 
