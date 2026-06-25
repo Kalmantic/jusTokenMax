@@ -25,7 +25,7 @@ anyone with Node — even **no Python** (see [Installation](Installation)).
 | OpenCode | `~/.config/opencode/opencode.json` | `mcp` (type `local`) |
 | Cursor | `~/.cursor/mcp.json` | `mcpServers` |
 | Claude Code | project `.mcp.json` | `mcpServers` |
-| Gemini CLI | `~/.gemini/settings.json` | `mcpServers` |
+| Gemini CLI | `~/.gemini/settings.json` | `mcpServers` (format verified against the official gemini-cli source) |
 | Qwen | `~/.qwen/settings.json` | `mcpServers` (format assumed Gemini-compatible, not verified on a live Qwen instance) |
 | Cline | `~/.cline/data/settings/cline_mcp_settings.json` | `mcpServers` |
 | Kilo Code | `~/.config/kilo/kilo.jsonc` | `mcp` (type `local`) |

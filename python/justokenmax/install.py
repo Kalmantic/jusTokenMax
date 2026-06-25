@@ -46,6 +46,10 @@ _AGENTS = {
         "entry": {"command": "npx", "args": _NPX_ARGS},
     },
     "gemini": {
+        # Gemini CLI reads MCP servers from the `mcpServers` object in
+        # ~/.gemini/settings.json, with each server an {command, args} entry.
+        # Verified against the official google-gemini/gemini-cli source
+        # (packages/cli/src/commands/mcp/add.ts and docs/cli/tutorials/mcp-setup.md).
         "path": "~/.gemini/settings.json", "fmt": "json",
         "root": "mcpServers",
         "entry": {"command": "npx", "args": _NPX_ARGS},
