@@ -207,3 +207,42 @@ def big_csv(tmp_path):
     p = tmp_path / "data.csv"
     p.write_text("\n".join(rows) + "\n")
     return str(p)
+
+
+def _build_image_pdf(path: str):
+    """Minimal valid single-page PDF whose only content is one uncompressed
+    raster image XObject (no codec dependency) — exercises image detection."""
+    img = bytes([255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 0])  # 2x2 RGB
+    content = b"q 2 0 0 2 0 0 cm /Im0 Do Q"
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Contents 4 0 R /Resources << /XObject << /Im0 5 0 R >> >> >>",
+        b"<< /Length " + str(len(content)).encode() + b" >>\nstream\n"
+        + content + b"\nendstream",
+        b"<< /Type /XObject /Subtype /Image /Width 2 /Height 2 "
+        b"/ColorSpace /DeviceRGB /BitsPerComponent 8 /Length 12 >>\nstream\n"
+        + img + b"\nendstream",
+    ]
+    out = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for i, obj in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n".encode("latin-1") + obj + b"\nendobj\n"
+    xref_pos = len(out)
+    n = len(objects) + 1
+    out += f"xref\n0 {n}\n".encode("latin-1") + b"0000000000 65535 f \n"
+    for off in offsets:
+        out += f"{off:010d} 00000 n \n".encode("latin-1")
+    out += b"trailer\n" + f"<< /Size {n} /Root 1 0 R >>\n".encode("latin-1")
+    out += f"startxref\n{xref_pos}\n%%EOF".encode("latin-1")
+    with open(path, "wb") as f:
+        f.write(out)
+
+
+@pytest.fixture
+def image_pdf(tmp_path):
+    path = tmp_path / "image.pdf"
+    _build_image_pdf(str(path))
+    return str(path)
