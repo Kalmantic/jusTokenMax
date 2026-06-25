@@ -1,8 +1,12 @@
+import json as _json
 import os
+import re
 from pathlib import Path
 
 from justokenmax import cache
 from justokenmax.optimize import optimize
+
+_HANDLE_RE = re.compile(r"<jtm:retrieve id=([0-9a-f]{64}) kind=(\w+) src=([^>]+)>")
 
 
 def test_pdf_dispatch_produces_markdown(text_pdf):
@@ -188,6 +192,64 @@ def test_missing_file_skipped(tmp_path):
     res = optimize(str(tmp_path / "ghost.pdf"))
     assert res.ok is False
     assert res.kind == "skip"
+
+
+def test_text_digest_carries_inband_handle(big_log):
+    # A compressed TEXT digest must carry a one-line, self-describing retrieve
+    # handle whose id is the cache key, surfaced in-band to the agent.
+    res = optimize(big_log)
+    assert res.handle and res.handle.startswith("<jtm:retrieve id=")
+    body = Path(res.output).read_text(encoding="utf-8")
+    m = _HANDLE_RE.search(body)
+    assert m, "no retrieve handle in the digest body"
+    key, kind, src = m.groups()
+    assert kind == "log"
+    assert src == os.path.basename(big_log)
+    # Handle on the result matches the one written in-band.
+    assert res.handle == f"<jtm:retrieve id={key} kind=log src={src}>"
+    # The leading comment line keeps the digest's important content intact.
+    assert "Build FAILED" in body
+
+
+def test_retrieve_by_inband_id_returns_original(big_log):
+    res = optimize(big_log)
+    key = _HANDLE_RE.search(res.handle).group(1)
+    # The agent can retrieve with the raw id, the "id=<key>" form, or the whole
+    # handle line it saw in the digest.
+    assert cache.lookup_by_id(key) == big_log
+    assert cache.resolve_handle_arg(key) == big_log
+    assert cache.resolve_handle_arg(f"id={key}") == big_log
+    assert cache.resolve_handle_arg(res.handle) == big_log
+    # Artifact-path lookup still works (backward compat).
+    assert cache.resolve_handle_arg(res.output) == big_log
+
+
+def test_json_artifact_stays_valid_and_handle_off_body(big_json):
+    # Strict JSON: the handle must NOT be injected into the body (would break
+    # json.loads) but the result/meta still carries it.
+    res = optimize(big_json)
+    assert res.kind == "json"
+    body = Path(res.output).read_text(encoding="utf-8")
+    assert "<jtm:retrieve" not in body
+    _json.loads(body)  # still valid JSON
+    assert res.handle.startswith("<jtm:retrieve id=")
+    key = _HANDLE_RE.search(res.handle).group(1)
+    # Resolvable by the in-band id even though it isn't in the body.
+    assert cache.lookup_by_id(key) == big_json
+
+
+def test_handle_is_deterministic(big_log):
+    first = optimize(big_log).handle
+    # Re-run (cache hit) yields the identical content-derived handle.
+    second = optimize(big_log).handle
+    assert first == second and first != ""
+
+
+def test_cache_hit_result_carries_handle(big_json):
+    first = optimize(big_json)
+    second = optimize(big_json)
+    assert second.cached is True
+    assert second.handle == first.handle
 
 
 def test_ledger_accumulates(text_pdf):

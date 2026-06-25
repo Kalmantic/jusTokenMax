@@ -69,6 +69,10 @@ class OptimizeResult:
     tokens_after: int
     cached: bool
     note: str = ""
+    # Self-describing, content-derived in-band retrieve handle (the cache key
+    # exposed). Surfaced to the agent so it knows the original is recoverable
+    # and how; "" for skips/passthroughs. See cache.retrieve_handle.
+    handle: str = ""
 
     @property
     def tokens_saved(self) -> int:
@@ -78,6 +82,22 @@ class OptimizeResult:
         d = dataclasses.asdict(self)
         d["tokens_saved"] = self.tokens_saved
         return d
+
+
+# Kinds whose artifact is strict machine-readable (JSON) or binary: a leading
+# comment line would corrupt them, so the handle rides only on the result/meta,
+# never injected into the body. Every other (text/markdown) digest gets a
+# leading `# <jtm:retrieve ...>` comment line.
+_NO_INBAND_KINDS = {"json", "image"}
+
+
+def _inband(digest: str, key: str, kind: str, src: str) -> str:
+    """Prepend a one-line retrieve-handle comment to a TEXT digest.
+
+    Non-corrupting: a leading `# ` comment is inert in markdown/log/diff/txt
+    outlines. Strict-JSON / binary kinds are excluded by the caller. Idempotent
+    inputs in -> identical output (the handle is content-derived)."""
+    return f"# {cache.retrieve_handle(key, kind, src)}\n{digest}"
 
 
 def _redact(text: str) -> str:
@@ -188,22 +208,25 @@ def optimize(
         if meta and out.exists():
             return OptimizeResult(True, "pdf", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "pdf", path))
         from .pdf import pdf_to_markdown
         md, n_pages = pdf_to_markdown(path)
         md = _redact(md)  # mask secrets before storing, like every other branch
-        out.write_text(md, encoding="utf-8")
+        body = _inband(md, key, "pdf", path)
+        out.write_text(body, encoding="utf-8")
         # A PDF is billed as text + a per-page image. Markdown keeps the text
         # and drops the image channel, so the saving is exactly that channel.
-        text_after = text_tokens(md)
+        text_after = text_tokens(body)
         tokens_before = pdf_image_tokens(n_pages) + text_after
         tokens_after = text_after
+        handle = cache.retrieve_handle(key, "pdf", path)
         meta = {"tokens_before": tokens_before, "tokens_after": tokens_after,
-                "pages": n_pages}
+                "pages": n_pages, "handle": handle}
         cache.save_meta(key, meta)
         res = OptimizeResult(True, "pdf", path, str(out), tokens_before,
                              tokens_after, cached=False,
-                             note=f"{n_pages} pages")
+                             note=f"{n_pages} pages", handle=handle)
 
     elif kind == "log":
         if os.path.getsize(path) < LOG_MIN_BYTES:
@@ -214,21 +237,25 @@ def optimize(
         if meta and out.exists():
             return OptimizeResult(True, "log", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "log", path))
         from .logs import compress_log
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_log(raw)
         digest = _redact(digest)
-        out.write_text(digest, encoding="utf-8")
+        body = _inband(digest, key, "log", path)
+        out.write_text(body, encoding="utf-8")
         tokens_before = text_tokens(raw)
-        tokens_after = text_tokens(digest)
+        tokens_after = text_tokens(body)
+        handle = cache.retrieve_handle(key, "log", path)
         meta = {"tokens_before": tokens_before, "tokens_after": tokens_after,
-                "lines": [stats["lines_before"], stats["lines_after"]]}
+                "lines": [stats["lines_before"], stats["lines_after"]],
+                "handle": handle}
         cache.save_meta(key, meta)
         res = OptimizeResult(True, "log", path, str(out), tokens_before,
                              tokens_after, cached=False,
                              note=f"{stats['lines_before']} -> "
-                                  f"{stats['lines_after']} lines")
+                                  f"{stats['lines_after']} lines", handle=handle)
 
     elif kind == "json":
         if os.path.getsize(path) < JSON_MIN_BYTES:
@@ -239,7 +266,8 @@ def optimize(
         if meta and out.exists():
             return OptimizeResult(True, "json", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "json", path))
         from .jsoncompress import compress_json, is_uniform_object_array
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         # Schema mode for the bulk case: a large blob, or a top-level uniform
@@ -257,16 +285,20 @@ def optimize(
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="not valid JSON")
         digest = _redact(digest)
+        # Strict JSON: do NOT inject the handle into the body (it would break
+        # json.loads). It rides on the result + meta instead.
         out.write_text(digest, encoding="utf-8")
         tokens_before = text_tokens(raw)
         tokens_after = text_tokens(digest)
-        meta = {"tokens_before": tokens_before, "tokens_after": tokens_after}
+        handle = cache.retrieve_handle(key, "json", path)
+        meta = {"tokens_before": tokens_before, "tokens_after": tokens_after,
+                "handle": handle}
         cache.save_meta(key, meta)
         res = OptimizeResult(True, "json", path, str(out), tokens_before,
                              tokens_after, cached=False,
                              note=f"{stats.get('mode', 'sample')}: "
                                   f"{stats['bytes_before']//1024}KB -> "
-                                  f"{stats['bytes_after']//1024}KB")
+                                  f"{stats['bytes_after']//1024}KB", handle=handle)
 
     elif kind == "ndjson":
         if os.path.getsize(path) < NDJSON_MIN_BYTES:
@@ -277,7 +309,8 @@ def optimize(
         if meta and out.exists():
             return OptimizeResult(True, "ndjson", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "ndjson", path))
         from .jsoncompress import compress_ndjson
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_ndjson(raw)
@@ -285,15 +318,18 @@ def optimize(
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="not NDJSON")
         digest = _redact(digest)
-        out.write_text(digest, encoding="utf-8")
+        body = _inband(digest, key, "ndjson", path)
+        out.write_text(body, encoding="utf-8")
         tokens_before = text_tokens(raw)
-        tokens_after = text_tokens(digest)
-        meta = {"tokens_before": tokens_before, "tokens_after": tokens_after}
+        tokens_after = text_tokens(body)
+        handle = cache.retrieve_handle(key, "ndjson", path)
+        meta = {"tokens_before": tokens_before, "tokens_after": tokens_after,
+                "handle": handle}
         cache.save_meta(key, meta)
         res = OptimizeResult(True, "ndjson", path, str(out), tokens_before,
                              tokens_after, cached=False,
                              note=f"{stats['records']} records, "
-                                  f"{stats['shapes']} shapes")
+                                  f"{stats['shapes']} shapes", handle=handle)
 
     elif kind == "lockfile":
         key, out = cache.cache_paths(path, opts, ".lock.txt")
@@ -301,7 +337,8 @@ def optimize(
         if meta and out.exists():
             return OptimizeResult(True, "lockfile", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "lockfile", path))
         from .lockfile import compress_lockfile, lock_flavor
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_lockfile(raw, lock_flavor(path) or "")
@@ -310,14 +347,17 @@ def optimize(
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note=stats.get("note", "lockfile parse failed"))
         digest = _redact(digest)
-        out.write_text(digest, encoding="utf-8")
+        body = _inband(digest, key, "lockfile", path)
+        out.write_text(body, encoding="utf-8")
         tokens_before = text_tokens(raw)
-        tokens_after = text_tokens(digest)
+        tokens_after = text_tokens(body)
+        handle = cache.retrieve_handle(key, "lockfile", path)
         cache.save_meta(key, {"tokens_before": tokens_before,
-                              "tokens_after": tokens_after})
+                              "tokens_after": tokens_after, "handle": handle})
         res = OptimizeResult(True, "lockfile", path, str(out), tokens_before,
                              tokens_after, cached=False,
-                             note=f"{stats['flavor']}: {stats['packages']} packages")
+                             note=f"{stats['flavor']}: {stats['packages']} packages",
+                             handle=handle)
 
     elif kind == "minified":
         key, out = cache.cache_paths(path, opts, ".min.txt")
@@ -325,7 +365,8 @@ def optimize(
         if meta and out.exists():
             return OptimizeResult(True, "minified", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "minified", path))
         from .lockfile import minified_stub
         # Don't read/tokenize the whole asset just to size it — a minified
         # bundle can be many MB, and reading it on the Read hot path defeats the
@@ -333,14 +374,16 @@ def optimize(
         # (~4 bytes/token), the same proxy used for other large-blob skips.
         n_bytes = os.path.getsize(path)
         digest, stats = minified_stub(n_bytes)
-        out.write_text(digest, encoding="utf-8")
+        body = _inband(digest, key, "minified", path)
+        out.write_text(body, encoding="utf-8")
         tokens_before = n_bytes // 4
-        tokens_after = text_tokens(digest)
+        tokens_after = text_tokens(body)
+        handle = cache.retrieve_handle(key, "minified", path)
         cache.save_meta(key, {"tokens_before": tokens_before,
-                              "tokens_after": tokens_after})
+                              "tokens_after": tokens_after, "handle": handle})
         res = OptimizeResult(True, "minified", path, str(out), tokens_before,
                              tokens_after, cached=False,
-                             note=f"{n_bytes // 1024}KB stubbed")
+                             note=f"{n_bytes // 1024}KB stubbed", handle=handle)
 
     elif kind == "notebook":
         key, out = cache.cache_paths(path, opts, ".ipynb.md")
@@ -348,7 +391,8 @@ def optimize(
         if meta and out.exists():
             return OptimizeResult(True, "notebook", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "notebook", path))
         from .notebook import notebook_to_markdown
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = notebook_to_markdown(raw)
@@ -356,15 +400,18 @@ def optimize(
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="not a notebook")
         digest = _redact(digest)
-        out.write_text(digest, encoding="utf-8")
+        body = _inband(digest, key, "notebook", path)
+        out.write_text(body, encoding="utf-8")
         tokens_before = text_tokens(raw)
-        tokens_after = text_tokens(digest)
+        tokens_after = text_tokens(body)
+        handle = cache.retrieve_handle(key, "notebook", path)
         cache.save_meta(key, {"tokens_before": tokens_before,
-                              "tokens_after": tokens_after})
+                              "tokens_after": tokens_after, "handle": handle})
         res = OptimizeResult(True, "notebook", path, str(out), tokens_before,
                              tokens_after, cached=False,
                              note=f"{stats['cells']} cells, "
-                                  f"{stats['images_elided']} images elided")
+                                  f"{stats['images_elided']} images elided",
+                             handle=handle)
 
     elif kind == "csv":
         if os.path.getsize(path) < CSV_MIN_BYTES:
@@ -375,7 +422,8 @@ def optimize(
         if meta and out.exists():
             return OptimizeResult(True, "csv", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "csv", path))
         from .csvtable import compress_csv
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_csv(raw)
@@ -383,14 +431,17 @@ def optimize(
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="empty csv")
         digest = _redact(digest)
-        out.write_text(digest, encoding="utf-8")
+        body = _inband(digest, key, "csv", path)
+        out.write_text(body, encoding="utf-8")
         tokens_before = text_tokens(raw)
-        tokens_after = text_tokens(digest)
+        tokens_after = text_tokens(body)
+        handle = cache.retrieve_handle(key, "csv", path)
         cache.save_meta(key, {"tokens_before": tokens_before,
-                              "tokens_after": tokens_after})
+                              "tokens_after": tokens_after, "handle": handle})
         res = OptimizeResult(True, "csv", path, str(out), tokens_before,
                              tokens_after, cached=False,
-                             note=f"{stats['rows']} rows x {stats['cols']} cols")
+                             note=f"{stats['rows']} rows x {stats['cols']} cols",
+                             handle=handle)
 
     elif kind == "diff":
         if os.path.getsize(path) < DIFF_MIN_BYTES:
@@ -401,20 +452,23 @@ def optimize(
         if meta and out.exists():
             return OptimizeResult(True, "diff", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "diff", path))
         from .diffcompress import compress_diff
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_diff(raw)
         digest = _redact(digest)
-        out.write_text(digest, encoding="utf-8")
+        body = _inband(digest, key, "diff", path)
+        out.write_text(body, encoding="utf-8")
         tokens_before = text_tokens(raw)
-        tokens_after = text_tokens(digest)
+        tokens_after = text_tokens(body)
+        handle = cache.retrieve_handle(key, "diff", path)
         cache.save_meta(key, {"tokens_before": tokens_before,
-                              "tokens_after": tokens_after})
+                              "tokens_after": tokens_after, "handle": handle})
         res = OptimizeResult(True, "diff", path, str(out), tokens_before,
                              tokens_after, cached=False,
                              note=f"{stats['files_elided']}/{stats['files_total']} "
-                                  f"files elided")
+                                  f"files elided", handle=handle)
 
     elif kind == "code":
         if os.path.getsize(path) < CODE_MIN_BYTES:
@@ -425,7 +479,8 @@ def optimize(
         if meta and out.exists():
             return OptimizeResult(True, "code", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "code", path))
         from .outline import file_outline
         try:
             digest, stats = file_outline(path)
@@ -433,19 +488,22 @@ def optimize(
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="outline failed")
         digest = _redact(digest)
+        body = _inband(digest, key, "code", path)
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         tokens_before = text_tokens(raw)
-        tokens_after = text_tokens(digest)
+        tokens_after = text_tokens(body)
         # Only worth it if the skeleton is meaningfully smaller than the source.
         if not stats.get("ok") or tokens_after >= tokens_before * 3 // 4:
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="outline not smaller")
-        out.write_text(digest, encoding="utf-8")
+        out.write_text(body, encoding="utf-8")
+        handle = cache.retrieve_handle(key, "code", path)
         cache.save_meta(key, {"tokens_before": tokens_before,
-                              "tokens_after": tokens_after})
+                              "tokens_after": tokens_after, "handle": handle})
         res = OptimizeResult(True, "code", path, str(out), tokens_before,
                              tokens_after, cached=False,
-                             note=f"{stats['symbols']} symbols ({stats['lang']})")
+                             note=f"{stats['symbols']} symbols ({stats['lang']})",
+                             handle=handle)
 
     else:  # image
         if os.path.getsize(path) < IMAGE_MIN_BYTES:
@@ -461,21 +519,28 @@ def optimize(
             return OptimizeResult(True, "image", path, existing["output"],
                                   existing["tokens_before"],
                                   existing["tokens_after"],
-                                  cached=True, note="cache hit")
+                                  cached=True, note="cache hit",
+                                  handle=cache.retrieve_handle(key, "image", path))
         out_path, stats = compress_image(path, str(out), max_edge=edge,
                                          quality=quality)
+        # Binary artifact: no in-band injection; the handle rides on result/meta.
+        handle = cache.retrieve_handle(key, "image", path)
         stats["output"] = out_path
+        stats["handle"] = handle
         cache.save_meta(key, stats)
         res = OptimizeResult(True, "image", path, out_path,
                              stats["tokens_before"], stats["tokens_after"],
                              cached=False,
                              note=f"{stats['bytes_before']//1024}KB -> "
-                                  f"{stats['bytes_after']//1024}KB")
+                                  f"{stats['bytes_after']//1024}KB", handle=handle)
 
     if res.ok and res.output:
         # Reversibility: remember which original produced this artifact so
-        # `justokenmax retrieve <artifact>` can hand the full version back.
-        cache.record_origin(res.output, res.source)
+        # `justokenmax retrieve <artifact>` can hand the full version back. Also
+        # index by the handle's content-derived id so the agent can retrieve
+        # with the in-band handle it saw (no artifact path needed). `key` is
+        # bound on every branch that reaches here.
+        cache.record_origin(res.output, res.source, key=key)
     if record and res.ok and not res.cached:
         cache.record_savings(res.tokens_saved, res.kind)
     return res
