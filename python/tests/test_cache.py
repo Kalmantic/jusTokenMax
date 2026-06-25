@@ -1,8 +1,4 @@
-import re
-
 from justokenmax import cache
-
-_HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 
 def test_retrieve_handle_is_deterministic_and_shaped():

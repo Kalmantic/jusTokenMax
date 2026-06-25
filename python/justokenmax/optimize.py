@@ -84,11 +84,10 @@ class OptimizeResult:
         return d
 
 
-# Kinds whose artifact is strict machine-readable (JSON) or binary: a leading
-# comment line would corrupt them, so the handle rides only on the result/meta,
-# never injected into the body. Every other (text/markdown) digest gets a
-# leading `# <jtm:retrieve ...>` comment line.
-_NO_INBAND_KINDS = {"json", "image"}
+# Strict machine-readable (JSON) and binary (image) artifacts must NOT get an
+# in-band handle comment — it would corrupt them. Those branches simply don't
+# call `_inband()`; the handle rides only on the OptimizeResult/meta instead.
+# Every other (text/markdown) digest gets a leading `# <jtm:retrieve ...>` line.
 
 
 def _inband(digest: str, key: str, kind: str, src: str) -> str:
