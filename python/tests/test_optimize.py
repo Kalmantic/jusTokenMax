@@ -91,6 +91,53 @@ def test_retrieve_returns_original(big_json):
     assert cache.lookup_origin(res.output) == big_json
 
 
+def test_uniform_json_uses_schema_mode(uniform_json_2mb):
+    res = optimize(uniform_json_2mb)
+    assert res.ok and res.kind == "json"
+    digest = Path(res.output).read_text(encoding="utf-8")
+    # The whole 2MB array collapses to a single schema node.
+    assert "30000 x {" in digest
+    assert "id:int" in digest and "name:str" in digest
+    # Huge reduction and reversibility preserved.
+    assert res.tokens_after < res.tokens_before // 100
+    assert cache.lookup_origin(res.output) == uniform_json_2mb
+
+
+def test_lockfile_dispatch_table(package_lock):
+    res = optimize(package_lock)
+    assert res.ok and res.kind == "lockfile"
+    assert res.output.endswith(".lock.txt")
+    assert res.tokens_saved > 0
+    digest = Path(res.output).read_text(encoding="utf-8")
+    assert "lodash@4.17.21" in digest
+    assert "react@18.2.0" in digest
+    assert "typescript@5.4.2" in digest
+    # Integrity hashes / resolved URLs are gone.
+    assert "sha512" not in digest
+    assert "registry" not in digest
+    assert cache.lookup_origin(res.output) == package_lock
+
+
+def test_lockfile_second_run_cache_hit(package_lock):
+    first = optimize(package_lock)
+    second = optimize(package_lock)
+    assert first.cached is False and second.cached is True
+    assert second.output == first.output
+
+
+def test_minified_dispatch_stub(min_js):
+    res = optimize(min_js)
+    assert res.ok and res.kind == "minified"
+    assert res.output.endswith(".min.txt")
+    assert res.tokens_saved > 0
+    digest = Path(res.output).read_text(encoding="utf-8")
+    assert "minified asset" in digest
+    assert "retrieve" in digest
+    # Source bytes do not survive in the stub.
+    assert "var x=1;" not in digest
+    assert cache.lookup_origin(res.output) == min_js
+
+
 def test_small_image_skipped(small_image):
     res = optimize(small_image)
     assert res.ok is False

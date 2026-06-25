@@ -39,6 +39,8 @@ IMAGE_MIN_BYTES = 200 * 1024
 LOG_MIN_BYTES = 8 * 1024
 # Below this a JSON blob isn't worth compressing.
 JSON_MIN_BYTES = 4 * 1024
+# Above this a JSON blob is collapsed to an inferred schema rather than sampled.
+JSON_SCHEMA_BYTES = 256 * 1024
 # Below this a CSV is small enough to read whole.
 CSV_MIN_BYTES = 4 * 1024
 
@@ -53,7 +55,7 @@ CODE_MIN_BYTES = 6 * 1024
 @dataclasses.dataclass
 class OptimizeResult:
     ok: bool
-    kind: str                 # "pdf" | "image" | "code" | "skip" | ...
+    kind: str                 # "pdf"|"image"|"code"|"lockfile"|"minified"|"skip"|...
     source: str
     output: Optional[str]     # path to optimized artifact (None if skipped)
     tokens_before: int
@@ -90,13 +92,36 @@ def _sniff(path: str) -> str:
     from .jsoncompress import looks_like_json
     if looks_like_json(head):
         return "json"
+    # Minified/packed asset: a single physical line far longer than any source.
+    from .lockfile import looks_minified
+    if looks_minified(head, path):
+        return "minified"
     # log-ish: many lines, or ANSI/timestamps present
     if "\x1b[" in head or head.count("\n") >= 50:
         return "log"
     return "skip"
 
 
+def _kind_by_name(path: str) -> Optional[str]:
+    """Decide kind by basename, BEFORE the extension switch.
+
+    Lockfiles (package-lock.json, Cargo.lock, ...) share extensions with plain
+    JSON/YAML but want their own dependency-table compressor; minified assets
+    (.min.js/.min.css) are opaque generated blobs we stub out. Returns None when
+    the name is unremarkable so `_kind_for` falls through to the ext switch.
+    """
+    from .lockfile import is_minified_name, lock_flavor
+    if lock_flavor(path):
+        return "lockfile"
+    if is_minified_name(path):
+        return "minified"
+    return None
+
+
 def _kind_for(path: str) -> str:
+    named = _kind_by_name(path)
+    if named:
+        return named
     ext = os.path.splitext(path)[1].lower()
     if ext in PDF_EXTS:
         return "pdf"
@@ -199,9 +224,19 @@ def optimize(
             return OptimizeResult(True, "json", path, str(out),
                                   meta["tokens_before"], meta["tokens_after"],
                                   cached=True, note="cache hit")
-        from .jsoncompress import compress_json
+        from .jsoncompress import compress_json, is_uniform_object_array
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
-        digest, stats = compress_json(raw)
+        # Schema mode for the bulk case: a large blob, or a top-level uniform
+        # array of objects (a table dump / RAG payload), collapses to one
+        # inferred schema node instead of a head+tail sample.
+        use_schema = os.path.getsize(path) > JSON_SCHEMA_BYTES
+        if not use_schema:
+            try:
+                import json as _json
+                use_schema = is_uniform_object_array(_json.loads(raw))
+            except (ValueError, TypeError):
+                use_schema = False
+        digest, stats = compress_json(raw, schema=use_schema)
         if not stats.get("ok"):
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="not valid JSON")
@@ -213,8 +248,53 @@ def optimize(
         cache.save_meta(key, meta)
         res = OptimizeResult(True, "json", path, str(out), tokens_before,
                              tokens_after, cached=False,
-                             note=f"{stats['bytes_before']//1024}KB -> "
+                             note=f"{stats.get('mode', 'sample')}: "
+                                  f"{stats['bytes_before']//1024}KB -> "
                                   f"{stats['bytes_after']//1024}KB")
+
+    elif kind == "lockfile":
+        key, out = cache.cache_paths(path, opts, ".lock.txt")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "lockfile", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .lockfile import compress_lockfile, lock_flavor
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        digest, stats = compress_lockfile(raw, lock_flavor(path) or "")
+        if not stats.get("ok"):
+            # Fail-open: an unparseable lockfile passes through untouched.
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note=stats.get("note", "lockfile parse failed"))
+        digest = _redact(digest)
+        out.write_text(digest, encoding="utf-8")
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after})
+        res = OptimizeResult(True, "lockfile", path, str(out), tokens_before,
+                             tokens_after, cached=False,
+                             note=f"{stats['flavor']}: {stats['packages']} packages")
+
+    elif kind == "minified":
+        key, out = cache.cache_paths(path, opts, ".min.txt")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "minified", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .lockfile import minified_stub
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        n_bytes = os.path.getsize(path)
+        digest, stats = minified_stub(n_bytes)
+        out.write_text(digest, encoding="utf-8")
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after})
+        res = OptimizeResult(True, "minified", path, str(out), tokens_before,
+                             tokens_after, cached=False,
+                             note=f"{n_bytes // 1024}KB stubbed")
 
     elif kind == "notebook":
         key, out = cache.cache_paths(path, opts, ".ipynb.md")
