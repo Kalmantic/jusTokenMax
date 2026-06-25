@@ -18,3 +18,4 @@ The import package is named `justokenmax` (the original attachments module);
 
 See the project root README for the full story and the Claude Code plugin.
 MIT licensed — Kashi & Rajan, founders of Kalmantic (jusCode.co).
+Enhanced by Arbaz (https://www.linkedin.com/in/arb5z/), CTO of LineupX.
