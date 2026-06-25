@@ -61,6 +61,22 @@ def test_discover_skips_missing_files(tmp_path, monkeypatch):
     assert rep["recoverable_tokens"] == 0
 
 
+def test_discover_stops_scanning_at_max_files(tmp_path, monkeypatch):
+    # Regression: once `max_files` unique paths are seen, every remaining read
+    # is a dup or would be refused, so discover() must stop rather than scan all
+    # of history (was `continue`, i.e. O(all reads)). With a cap of 3 and 10
+    # distinct reads, files_seen caps at 3 and reads_total reflects the early
+    # stop (not all 10).
+    hist = tmp_path / "projects"
+    hist.mkdir(parents=True)
+    _session(hist, "s.jsonl", [f"/tmp/f{i}.txt" for i in range(10)])
+    monkeypatch.setenv("JUSTOKENMAX_HISTORY", str(hist))
+
+    rep = discover.discover(max_files=3)
+    assert rep["files_seen"] == 3
+    assert rep["reads_total"] < 10           # short-circuited, didn't scan all
+
+
 def test_discover_fails_open_when_history_absent(tmp_path, monkeypatch):
     monkeypatch.setenv("JUSTOKENMAX_HISTORY", str(tmp_path / "nope"))
     rep = discover.discover()

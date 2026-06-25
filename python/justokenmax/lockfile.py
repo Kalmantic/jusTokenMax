@@ -86,7 +86,13 @@ def _npm_lock(text: str, flavor: str) -> Tuple[str, dict]:
     return _table(pairs, flavor)
 
 
-_YARN_ENTRY = re.compile(r'^"?([^"@\s][^@\n]*)@', re.MULTILINE)
+# A yarn.lock entry header is `name@range:` or, for scoped packages,
+# `@scope/name@range:` — and may list several comma-separated specs. The name
+# can therefore start with `@` (scoped), so we match an optional `@scope/`
+# prefix before the package name and stop at the `@` that begins the version
+# range. Forbidding a leading `@` (the original bug) silently dropped every
+# scoped dependency (@types/node, @babel/core, ...).
+_YARN_ENTRY = re.compile(r'^"?(@[^"@\s/]+/)?([^"@\s/][^@\n]*?)@', re.MULTILINE)
 _YARN_VERSION = re.compile(r'^\s+version:?\s+"?([^"\s]+)"?', re.MULTILINE)
 
 
@@ -103,7 +109,9 @@ def _yarn_lock(text: str, flavor: str) -> Tuple[str, dict]:
         m = _YARN_ENTRY.match(lines[0])
         ver_m = _YARN_VERSION.search(block)
         if m and ver_m:
-            pairs.append((m.group(1).strip().strip('"'), ver_m.group(1)))
+            # group(1) is the optional `@scope/` prefix, group(2) the name.
+            name = ((m.group(1) or "") + m.group(2)).strip().strip('"')
+            pairs.append((name, ver_m.group(1)))
     return _table(pairs, flavor)
 
 

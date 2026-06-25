@@ -324,11 +324,14 @@ def optimize(
                                   meta["tokens_before"], meta["tokens_after"],
                                   cached=True, note="cache hit")
         from .lockfile import minified_stub
-        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        # Don't read/tokenize the whole asset just to size it — a minified
+        # bundle can be many MB, and reading it on the Read hot path defeats the
+        # point of stubbing it. Estimate the original cost from the byte count
+        # (~4 bytes/token), the same proxy used for other large-blob skips.
         n_bytes = os.path.getsize(path)
         digest, stats = minified_stub(n_bytes)
         out.write_text(digest, encoding="utf-8")
-        tokens_before = text_tokens(raw)
+        tokens_before = n_bytes // 4
         tokens_after = text_tokens(digest)
         cache.save_meta(key, {"tokens_before": tokens_before,
                               "tokens_after": tokens_after})

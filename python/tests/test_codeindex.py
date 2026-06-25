@@ -98,6 +98,26 @@ def test_gitignore_glob_pattern(tmp_path):
     assert "real_fn" in names and "gen_fn" not in names
 
 
+def test_gitignore_anchored_dir_only_matches_root(tmp_path):
+    # Regression: an anchored `/dist/` is pinned to the repo root. It must prune
+    # ./dist but NOT a nested ./packages/foo/dist (common in monorepos) — the
+    # original matcher checked every path segment and dropped the sub-package.
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "top.py").write_text("def top_sym(): pass\n")
+    (tmp_path / "packages" / "foo" / "dist").mkdir(parents=True)
+    (tmp_path / "packages" / "foo" / "dist" / "sub.py").write_text(
+        "def nested_dist_sym(): pass\n")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "keep.py").write_text("def keep_sym(): pass\n")
+    (tmp_path / ".gitignore").write_text("/dist/\n")
+
+    idx = codeindex.build_index(str(tmp_path))
+    names = {s["name"] for s in idx["symbols"]}
+    assert "keep_sym" in names
+    assert "nested_dist_sym" in names      # nested dist must survive
+    assert "top_sym" not in names          # root-level dist still pruned
+
+
 # --------------------------- incremental rebuild -------------------------- #
 def test_build_index_reuses_cache_for_unchanged(tmp_path, monkeypatch):
     (tmp_path / "a.py").write_text("def alpha(): pass\n")

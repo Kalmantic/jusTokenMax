@@ -89,8 +89,13 @@ def _ignored(rel: str, patterns: List[str], is_dir: bool) -> bool:
         p = p.rstrip("/")
         if dir_only and not is_dir:
             # `foo/` matches only when `foo` is (an ancestor) directory; a file
-            # qualifies only if one of its parent segments matches.
-            if any(fnmatch.fnmatch(seg, p) for seg in rel.split("/")[:-1]):
+            # qualifies only if one of its parent segments matches. An *anchored*
+            # `/foo/` is pinned to the repo root, so only the FIRST segment may
+            # match — otherwise `/dist/` would wrongly exclude a nested
+            # `packages/foo/dist/...` in a monorepo.
+            parents = rel.split("/")[:-1]
+            segs = parents[:1] if anchored else parents
+            if any(fnmatch.fnmatch(seg, p) for seg in segs):
                 return True
             continue
         # full-path match (anchored or with a '/' in the pattern)

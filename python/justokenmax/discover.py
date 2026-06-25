@@ -104,12 +104,19 @@ def discover(root: Optional[str] = None, max_files: int = 5000) -> dict:
 
     logs = sorted(glob.glob(os.path.join(root, "**", "*.jsonl"), recursive=True))
     report["sessions"] = len(logs)
+    capped = False
     for log in logs:
+        if capped:
+            break
         for raw_path in _read_paths(log):
+            if len(seen_paths) >= max_files:
+                # Cap reached: every remaining read is either a duplicate or a
+                # path we'd refuse to add, so stop scanning rather than walking
+                # the rest of history for nothing (was `continue`, i.e. O(all)).
+                capped = True
+                break
             n_reads += 1
             if raw_path in seen_paths:
-                continue
-            if len(seen_paths) >= max_files:
                 continue
             seen_paths.add(raw_path)
             saved, kind = _recoverable(raw_path, unsupported, report)

@@ -69,6 +69,27 @@ def test_yarn_lock_table():
     assert "sha512" not in digest
 
 
+def test_yarn_lock_keeps_scoped_packages():
+    # Regression: scoped packages (@scope/name) must NOT be dropped. The entry
+    # header starts with `@`, which the original name regex forbade — so every
+    # scoped dependency silently vanished from the digest.
+    src = ('# yarn lockfile v1\n'
+           '"@types/node@^20.0.0":\n'
+           '  version "20.11.5"\n'
+           '  integrity sha512-AAA\n\n'
+           '"@babel/core@^7.0.0":\n'
+           '  version "7.23.9"\n'
+           '  integrity sha512-BBB\n\n'
+           'lodash@^4.17.21:\n'
+           '  version "4.17.21"\n'
+           '  integrity sha512-CCC\n')
+    digest, stats = compress_lockfile(src, "yarn")
+    assert stats["packages"] == 3                      # all three, not 1
+    assert "@types/node@20.11.5" in digest
+    assert "@babel/core@7.23.9" in digest
+    assert "lodash@4.17.21" in digest
+
+
 def test_pnpm_lock_table():
     src = ("lockfileVersion: '6.0'\n"
            "packages:\n"
