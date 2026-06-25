@@ -8,8 +8,8 @@ fraction of the tokens.
 > Built by **Kashi** ([linkedin](https://www.linkedin.com/in/kashiks/)) and
 > **Rajan** ([linkedin](https://www.linkedin.com/in/thiyagarajan/)), founders of
 > [Kalmantic](https://www.kalmantic.com) — [jusCode.co](https://juscode.co).
-> Enhanced by **Arbaz** ([linkedin](https://www.linkedin.com/in/arb5z/)), CTO of LineupX.
 > MIT licensed.
+> Contributors: **Arbaz** ([linkedin](https://www.linkedin.com/in/arb5z/)), CTO of LineupX.
 
 [![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-db61a2?logo=githubsponsors)](https://github.com/sponsors/Kashi-KS)
 
