@@ -142,9 +142,9 @@ def test_format_report_shows_since_last_run_delta():
 def test_newer_than_days_filters_logs_by_mtime(tmp_path, monkeypatch, big_json):
     hist = tmp_path / "projects"
     hist.mkdir(parents=True)
-    recent = _session(hist, "recent.jsonl", [big_json])
+    _session(hist, "recent.jsonl", [big_json])
     stale = _session(hist, "stale.jsonl", [big_json])
-    # Backdate the stale log to 30 days ago; keep `recent` fresh.
+    # Backdate the stale log to 30 days ago; recent.jsonl stays fresh.
     old = time.time() - 30 * 86400
     os.utime(stale, (old, old))
     monkeypatch.setenv("JUSTOKENMAX_HISTORY", str(hist))
