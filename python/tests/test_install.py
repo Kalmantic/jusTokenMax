@@ -95,8 +95,14 @@ def test_detect_includes_claude(fake_home):
 
 
 def test_install_gemini(fake_home):
+    # Gemini CLI's documented format: an {command, args} entry under the
+    # `mcpServers` object in ~/.gemini/settings.json. Assert the file lands at
+    # that path and the entry matches, so the registration Gemini actually
+    # reads stays correct.
     inst.install("gemini")
-    data = json.loads(Path(inst.config_path("gemini")).read_text())
+    p = inst.config_path("gemini")
+    assert p.endswith("/.gemini/settings.json")
+    data = json.loads(Path(p).read_text())
     assert data["mcpServers"]["justokenmax"]["command"] == "npx"
     assert data["mcpServers"]["justokenmax"]["args"] == [
         "-y", "@kalmantic/justokenmax", "mcp"]
@@ -106,6 +112,8 @@ def test_install_qwen(fake_home):
     inst.install("qwen")
     data = json.loads(Path(inst.config_path("qwen")).read_text())
     assert data["mcpServers"]["justokenmax"]["command"] == "npx"
+    assert data["mcpServers"]["justokenmax"]["args"] == [
+        "-y", "@kalmantic/justokenmax", "mcp"]
 
 
 def test_install_cline(fake_home):
@@ -114,6 +122,8 @@ def test_install_cline(fake_home):
     assert p.endswith("cline_mcp_settings.json")
     data = json.loads(Path(p).read_text())
     assert data["mcpServers"]["justokenmax"]["command"] == "npx"
+    assert data["mcpServers"]["justokenmax"]["args"] == [
+        "-y", "@kalmantic/justokenmax", "mcp"]
 
 
 def test_install_kilocode(fake_home):
