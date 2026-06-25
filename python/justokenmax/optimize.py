@@ -9,7 +9,7 @@ from typing import Optional
 
 from . import cache
 from .config import is_enabled
-from .redact import mask_secrets, redact
+from .redact import mask_secrets, redact, redact_with_map
 from .tokens import pdf_image_tokens, text_tokens
 
 PDF_EXTS = {".pdf"}
@@ -80,7 +80,7 @@ class OptimizeResult:
         return d
 
 
-def _redact(text: str) -> str:
+def _redact(text: str, key: Optional[str] = None) -> str:
     """Sanitize a text digest before it is written to the cache artifact.
 
     Secret masking (API keys, tokens, JWTs, password=/secret= pairs) runs
@@ -89,7 +89,21 @@ def _redact(text: str) -> str:
     disabled. So every write path in `optimize()` is sanitized regardless of
     config. The imports are module-level (not lazy) so this is visible to
     static dataflow analysis.
+
+    Default behaviour is irreversible (mask-before-cache, no map). When the
+    opt-in audited-reversible mode is enabled (config.redact_audit_enabled) AND
+    a cache `key` is supplied, secrets are still masked in the digest but each
+    masked span is tagged and its original recorded in an owner-only sidecar map
+    (cache.save_redaction_map) so an authorised, audited `unmask` can recover it.
+    The digest itself stays secret-safe either way — only placeholders are
+    written, never originals.
     """
+    from .config import redact_audit_enabled
+    if key is not None and redact_audit_enabled():
+        masked, mapping = redact_with_map(text)
+        if mapping:
+            cache.save_redaction_map(key, mapping)
+        return masked
     if is_enabled("redact"):
         return redact(text)[0]          # full pass: blob elision + secret mask
     return mask_secrets(text)[0]        # safety only: always mask secrets
@@ -191,7 +205,7 @@ def optimize(
                                   cached=True, note="cache hit")
         from .pdf import pdf_to_markdown
         md, n_pages = pdf_to_markdown(path)
-        md = _redact(md)  # mask secrets before storing, like every other branch
+        md = _redact(md, key)  # mask secrets before storing, like every other branch
         out.write_text(md, encoding="utf-8")
         # A PDF is billed as text + a per-page image. Markdown keeps the text
         # and drops the image channel, so the saving is exactly that channel.
@@ -218,7 +232,7 @@ def optimize(
         from .logs import compress_log
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_log(raw)
-        digest = _redact(digest)
+        digest = _redact(digest, key)
         out.write_text(digest, encoding="utf-8")
         tokens_before = text_tokens(raw)
         tokens_after = text_tokens(digest)
@@ -256,7 +270,7 @@ def optimize(
         if not stats.get("ok"):
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="not valid JSON")
-        digest = _redact(digest)
+        digest = _redact(digest, key)
         out.write_text(digest, encoding="utf-8")
         tokens_before = text_tokens(raw)
         tokens_after = text_tokens(digest)
@@ -284,7 +298,7 @@ def optimize(
         if not stats.get("ok"):
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="not NDJSON")
-        digest = _redact(digest)
+        digest = _redact(digest, key)
         out.write_text(digest, encoding="utf-8")
         tokens_before = text_tokens(raw)
         tokens_after = text_tokens(digest)
@@ -309,7 +323,7 @@ def optimize(
             # Fail-open: an unparseable lockfile passes through untouched.
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note=stats.get("note", "lockfile parse failed"))
-        digest = _redact(digest)
+        digest = _redact(digest, key)
         out.write_text(digest, encoding="utf-8")
         tokens_before = text_tokens(raw)
         tokens_after = text_tokens(digest)
@@ -355,7 +369,7 @@ def optimize(
         if not stats.get("ok"):
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="not a notebook")
-        digest = _redact(digest)
+        digest = _redact(digest, key)
         out.write_text(digest, encoding="utf-8")
         tokens_before = text_tokens(raw)
         tokens_after = text_tokens(digest)
@@ -382,7 +396,7 @@ def optimize(
         if not stats.get("ok"):
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="empty csv")
-        digest = _redact(digest)
+        digest = _redact(digest, key)
         out.write_text(digest, encoding="utf-8")
         tokens_before = text_tokens(raw)
         tokens_after = text_tokens(digest)
@@ -405,7 +419,7 @@ def optimize(
         from .diffcompress import compress_diff
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         digest, stats = compress_diff(raw)
-        digest = _redact(digest)
+        digest = _redact(digest, key)
         out.write_text(digest, encoding="utf-8")
         tokens_before = text_tokens(raw)
         tokens_after = text_tokens(digest)
@@ -432,7 +446,7 @@ def optimize(
         except Exception:  # fail-open: any parser error -> passthrough
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="outline failed")
-        digest = _redact(digest)
+        digest = _redact(digest, key)
         raw = Path(path).read_text(encoding="utf-8", errors="replace")
         tokens_before = text_tokens(raw)
         tokens_after = text_tokens(digest)

@@ -74,6 +74,16 @@ def max_read_tokens() -> int:
         return DEFAULT_MAX_READ_TOKENS
 
 
+def redact_audit_enabled() -> bool:
+    """Opt-in switch for audited-reversible redaction. OFF by default, so the
+    standard mask-before-cache flow stays irreversible. Enabled by env
+    JUSTOKENMAX_REDACT_AUDIT=1 (truthy) or config JSON {"redact_audit": true}."""
+    env = os.environ.get("JUSTOKENMAX_REDACT_AUDIT")
+    if env is not None:
+        return env.strip().lower() in ("1", "true", "yes", "on")
+    return bool(load().get("redact_audit", False))
+
+
 def set_kind(kind: str, enabled: bool) -> dict:
     """Persist a lever's on/off state to the config file; returns the new config."""
     if kind not in KINDS:

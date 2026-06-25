@@ -70,6 +70,15 @@ def main(argv=None) -> int:
     pr.add_argument("artifact")
     pr.add_argument("--json", action="store_true")
 
+    pu = sub.add_parser("unmask",
+                        help="audited reversible redaction: recover masked secrets "
+                             "from a digest using its stored map (opt-in)")
+    pu.add_argument("key", help="cache key the redaction map is stored under")
+    pu.add_argument("text", nargs="?", default="-",
+                    help="masked digest file, or '-'/omitted to read stdin")
+    pu.add_argument("--actor", default=None, help="who is unmasking (audited)")
+    pu.add_argument("--json", action="store_true")
+
     pd = sub.add_parser("delta", help="return only what changed since last read")
     pd.add_argument("files", nargs="+")
     pd.add_argument("--json", action="store_true")
@@ -314,6 +323,16 @@ def main(argv=None) -> int:
             print(json.dumps({**st, "diff": digest}))
         else:
             sys.stdout.write(digest)
+        return 0
+
+    if args.cmd == "unmask":
+        masked = (sys.stdin.read() if args.text == "-"
+                  else Path(args.text).read_text(encoding="utf-8", errors="replace"))
+        restored = cache.unmask(args.key, masked, audit_actor=args.actor)
+        if args.json:
+            print(json.dumps({"key": args.key, "restored": restored}))
+        else:
+            sys.stdout.write(restored)
         return 0
 
     if args.cmd == "retrieve":
