@@ -373,6 +373,61 @@ def bench_csv():
     return tb, ta, (100 * (tb - ta) // tb if tb else 0)
 
 
+def _build_sample_deck(path, n_slides=12):
+    """A representative deck: titled slides with bullets, one data table, a few
+    images, and speaker notes — enough to exercise the extractor honestly."""
+    from pptx import Presentation
+    from pptx.util import Inches
+    from PIL import Image
+
+    prs = Presentation()
+    for i in range(n_slides):
+        slide = prs.slides.add_slide(prs.slide_layouts[1])
+        slide.shapes.title.text = f"Section {i}: findings and next steps"
+        body = slide.placeholders[1].text_frame
+        body.text = "Headline takeaway for this section"
+        for b in ("supporting detail with measurable impact",
+                  "second point that motivates the recommendation",
+                  "owner and timeline for the follow-up action"):
+            p = body.add_paragraph(); p.text = b; p.level = 1
+        slide.notes_slide.notes_text_frame.text = (
+            "Speaker note: emphasise the ROI figure and pause for questions.")
+        if i % 4 == 0:  # a couple of image-bearing slides
+            img = os.path.join(FIXTURES, f"_deckimg{i}.png")
+            Image.new("RGB", (32, 32), (i * 10 % 255, 80, 160)).save(img)
+            slide.shapes.add_picture(img, Inches(6), Inches(1))
+    tbl_slide = prs.slides.add_slide(prs.slide_layouts[5])
+    tbl_slide.shapes.title.text = "Metrics"
+    tbl = tbl_slide.shapes.add_table(4, 3, Inches(1), Inches(2),
+                                     Inches(8), Inches(3)).table
+    for c, h in enumerate(("metric", "baseline", "target")):
+        tbl.cell(0, c).text = h
+    for r in range(1, 4):
+        tbl.cell(r, 0).text = f"KPI {r}"
+        tbl.cell(r, 1).text = str(r * 10)
+        tbl.cell(r, 2).text = str(r * 15)
+    prs.save(path)
+
+
+def bench_pptx():
+    """PPTX is conversion, not compression: the text was already text, so tokens
+    are preserved (before == after). The win is that an otherwise-opaque binary
+    deck becomes readable structured Markdown with its dropped visuals flagged.
+    Reported honestly — no fake reduction %."""
+    try:
+        import pptx  # noqa: F401
+    except ImportError:
+        return None
+    from justokenmax.pptx import pptx_to_markdown
+    path = os.path.join(FIXTURES, "sample-deck.pptx")
+    if not os.path.exists(path):
+        _build_sample_deck(path)
+    md, stats = pptx_to_markdown(path)
+    return {"slides": stats["slides"], "images": stats["images"],
+            "charts": stats["charts"], "tables": stats["tables"],
+            "tokens": _count2(md)}
+
+
 def bench_delta():
     import difflib
     base = [f"line {i}" for i in range(600)]
@@ -403,6 +458,7 @@ def main():
     nb_tb, nb_ta, nb_pct = bench_notebook()
     csv_tb, csv_ta, csv_pct = bench_csv()
     d_tb, d_ta, d_pct = bench_delta()
+    pptx_row = bench_pptx()
     idx = bench_index()
 
     lines = []
@@ -462,6 +518,21 @@ def main():
                  f"**-{csv_pct}%** |")
     lines.append(f"| delta re-read (1 edit in 600 lines) | {human(d_tb)} | "
                  f"{human(d_ta)} | **-{d_pct}%** |")
+
+    if pptx_row:
+        lines.append("\n## PowerPoint (.pptx) — conversion, not compression\n")
+        lines.append("A deck's text is already text, so tokens are preserved "
+                     "(before == after). The win is that an opaque binary deck "
+                     "becomes readable structured Markdown — titles, bullets, "
+                     "tables, speaker notes — with every dropped image/chart "
+                     "flagged per slide so visual-only slides never vanish "
+                     "silently.\n")
+        lines.append("| input | slides | tables | images flagged | "
+                     "extracted tokens |")
+        lines.append("| --- | ---: | ---: | ---: | ---: |")
+        lines.append(f"| sample deck | {pptx_row['slides']} | "
+                     f"{pptx_row['tables']} | {pptx_row['images']} | "
+                     f"{human(pptx_row['tokens'])} |")
 
     lines.append("\n## Code index (read symbols, not files)\n")
     lines.append(f"Indexed **{human(idx['symbols'])} symbols** across "

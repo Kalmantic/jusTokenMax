@@ -51,6 +51,7 @@ cheaper equivalent, **before** it costs you a token.
 | Jupyter notebook | **−99%** |
 | CSV (thousands of rows) | **−99%** |
 | Git diff (lockfile churn) | lockfile → 1 line |
+| PowerPoint `.pptx` deck | binary → readable Markdown |
 | Finding a symbol vs reading the file | **−97%** |
 
 ---
@@ -151,6 +152,7 @@ The canonical install is the Python package; it provides the `justokenmax` CLI.
 git clone https://github.com/Kalmantic/jusTokenMax && cd jusTokenMax
 pip install pypdf Pillow            # required codecs
 pip install pdfplumber              # optional: better PDF table extraction
+pip install python-pptx             # optional: PowerPoint (.pptx) extraction
 pip install ./python                # installs the `justokenmax` CLI
 justokenmax --version
 ```
@@ -223,6 +225,7 @@ Code hook) — see [`integrations/opencode/`](integrations/opencode/).
 | **Minified assets** | `.min.js` / `.min.css` & single-line packed blobs | stub to one line (`<minified asset, N bytes — retrieve for source>`) | **−99%** |
 | **Notebooks** | `.ipynb` files | drop base64 image outputs, truncate cell outputs, keep code + markdown | **−99%** |
 | **CSV / tabular** | large tables | header + inferred column types + sample rows + row count | **−99%** |
+| **PowerPoint** | `.pptx` decks | per slide: title + bullets + tables + speaker notes, in reading order; dropped images/charts/embedded objects flagged per slide | binary → readable (conversion) |
 | **Git diffs** | lockfile/generated churn | keep code hunks, collapse lockfile/generated/minified file diffs to one line | lockfile → 1 line |
 | **Delta reads** | re-reading the same file | return only the diff since the last read, not the whole file | **−96%** |
 | **Redaction** | secrets & blobs in text | mask API keys/tokens/passwords, elide base64/data-URIs (tokens **+** safety) | safety + tokens |
@@ -292,6 +295,14 @@ model at a conservative ~1,500 tokens/page. Full detail (regenerable) in
 | CSV, 5,000 rows | 57,340 | 237 | **−99%** |
 | delta re-read, 1 edit in 600 lines | 2,407 | 88 | **−96%** |
 
+**PowerPoint (.pptx)** is conversion, not compression — a deck's text is already
+text, so tokens are preserved (before == after). The win is that an opaque binary
+deck becomes readable structured Markdown (titles, bullets, tables, speaker notes
+in reading order) with every dropped image, chart, and embedded object
+(SmartArt/OLE) flagged per slide, so a visual-only slide never silently
+disappears. Requires the optional `python-pptx`
+library; absent it, decks pass through untouched (fail-open).
+
 **Code index** — locating a symbol vs reading the file, over 21 lookups in
 jusTokenMax's own source: **16,691 → 486 tokens (−97%)**. **Images** — 3000×2000
 → 1568×1045, 186 KB → 107 KB (**−42% bytes**).
@@ -354,13 +365,13 @@ justokenmax config enable pdf         # back on
 JUSTOKENMAX_DISABLE=pdf,image justokenmax optimize x.pdf   # one-off, via env
 ```
 
-Kinds: `pdf image log json notebook csv diff redact`. A disabled kind is skipped
-by `optimize()` and left untouched by the Read hook.
+Kinds: `pdf image log json notebook csv diff pptx redact`. A disabled kind is
+skipped by `optimize()` and left untouched by the Read hook.
 
 ### Plugin surface
 
 - **Hook:** `PreToolUse(Read)` transparently rewrites a `Read` of a PDF / image /
-  `.log` / JSON / `.ipynb` / CSV / diff to the cheap artifact via `updatedInput`.
+  `.log` / JSON / `.ipynb` / CSV / diff / `.pptx` to the cheap artifact via `updatedInput`.
   It **never blocks a Read** — any failure falls through untouched.
 - **MCP server:** `.mcp.json` launches a stdlib stdio server exposing
   `justokenmax_optimize`, `_compress_json`, `_compress_log`, `_compress_diff`,
@@ -390,8 +401,8 @@ open. Secrets and base64 blobs are masked inside every text digest.
 ## Test
 
 ```bash
-cd python && pip install -e . pytest pdfplumber
-pytest -q      # pdf, image, log, json, notebook, csv, diff, delta, redact, code-index, outline, optimize, cli, hook, mcp
+cd python && pip install -e . pytest pdfplumber python-pptx
+pytest -q      # pdf, image, log, json, notebook, csv, diff, pptx, delta, redact, code-index, outline, optimize, cli, hook, mcp
 ```
 
 ## Results — measured savings
