@@ -51,6 +51,7 @@ cheaper equivalent, **before** it costs you a token.
 | Jupyter notebook | **−99%** |
 | CSV (thousands of rows) | **−99%** |
 | Git diff (lockfile churn) | lockfile → 1 line |
+| SVG diagram (labels / draw.io→Mermaid) | **−97%** |
 | Finding a symbol vs reading the file | **−97%** |
 
 ---
@@ -224,6 +225,7 @@ Code hook) — see [`integrations/opencode/`](integrations/opencode/).
 | **Notebooks** | `.ipynb` files | drop base64 image outputs, truncate cell outputs, keep code + markdown | **−99%** |
 | **CSV / tabular** | large tables | header + inferred column types + sample rows + row count | **−99%** |
 | **Git diffs** | lockfile/generated churn | keep code hunks, collapse lockfile/generated/minified file diffs to one line | lockfile → 1 line |
+| **SVG** | `.svg` diagrams | extract `<text>` labels in reading order; draw.io exports decode their embedded source to true **Mermaid**; textless icons flagged | **−97%** |
 | **Delta reads** | re-reading the same file | return only the diff since the last read, not the whole file | **−96%** |
 | **Redaction** | secrets & blobs in text | mask API keys/tokens/passwords, elide base64/data-URIs (tokens **+** safety) | safety + tokens |
 | **Code index + outline** | reading whole files to find code | symbol map (`file:line` + signature) + file outlines so you read only the relevant range | **−97%** to locate a symbol |
@@ -291,6 +293,17 @@ model at a conservative ~1,500 tokens/page. Full detail (regenerable) in
 | notebook, 20 cells w/ image outputs | 401,170 | 610 | **−99%** |
 | CSV, 5,000 rows | 57,340 | 237 | **−99%** |
 | delta re-read, 1 edit in 600 lines | 2,407 | 88 | **−96%** |
+| SVG diagram (labels in reading order) | 10,487 | 283 | **−97%** |
+
+SVG (`.svg`) extracts `<text>`/`<tspan>` labels in reading order — stdlib only,
+no dependency. The row above is the in-repo synthetic benchmark; on real public
+Graphviz diagrams it measures similarly (≈−98%). A textless icon is flagged like
+an image and left raw. Best-effort on top: a **draw.io** export carries its
+source mxGraph in the root `content` attribute (base64+deflate, or uncompressed),
+which is decoded with the standard library to true **Mermaid** (nodes + edges) —
+any failure falls back to label extraction. We deliberately don't reconstruct
+edges from raw geometry — that's fragile guesswork; faithful structure comes only
+from embedded source.
 
 **Code index** — locating a symbol vs reading the file, over 21 lookups in
 jusTokenMax's own source: **16,691 → 486 tokens (−97%)**. **Images** — 3000×2000
@@ -354,13 +367,13 @@ justokenmax config enable pdf         # back on
 JUSTOKENMAX_DISABLE=pdf,image justokenmax optimize x.pdf   # one-off, via env
 ```
 
-Kinds: `pdf image log json notebook csv diff redact`. A disabled kind is skipped
+Kinds: `pdf image log json notebook csv diff svg redact`. A disabled kind is skipped
 by `optimize()` and left untouched by the Read hook.
 
 ### Plugin surface
 
 - **Hook:** `PreToolUse(Read)` transparently rewrites a `Read` of a PDF / image /
-  `.log` / JSON / `.ipynb` / CSV / diff to the cheap artifact via `updatedInput`.
+  `.log` / JSON / `.ipynb` / CSV / diff / SVG to the cheap artifact via `updatedInput`.
   It **never blocks a Read** — any failure falls through untouched.
 - **MCP server:** `.mcp.json` launches a stdlib stdio server exposing
   `justokenmax_optimize`, `_compress_json`, `_compress_log`, `_compress_diff`,
@@ -391,7 +404,7 @@ open. Secrets and base64 blobs are masked inside every text digest.
 
 ```bash
 cd python && pip install -e . pytest pdfplumber
-pytest -q      # pdf, image, log, json, notebook, csv, diff, delta, redact, code-index, outline, optimize, cli, hook, mcp
+pytest -q      # pdf, image, log, json, notebook, csv, diff, svg, delta, redact, code-index, outline, optimize, cli, hook, mcp
 ```
 
 ## Results — measured savings
