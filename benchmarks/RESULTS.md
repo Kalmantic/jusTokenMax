@@ -38,6 +38,7 @@ _Image note: native-vision models downscale to <=1568px anyway, so the byte savi
 | --- | ---: | ---: | ---: |
 | notebook (20 cells, image outputs) | 401,170 | 610 | **-99%** |
 | CSV (5,000 rows) | 57,340 | 237 | **-99%** |
+| XLSX (5,000 rows) | 66,678 | 778 | **-98%** |
 | delta re-read (1 edit in 600 lines) | 2,407 | 88 | **-96%** |
 
 ## Code index (read symbols, not files)
