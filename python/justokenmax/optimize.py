@@ -22,6 +22,9 @@ NDJSON_EXTS = {".ndjson", ".jsonl"}
 NB_EXTS = {".ipynb"}
 CSV_EXTS = {".csv", ".tsv"}
 DIFF_EXTS = {".diff", ".patch"}
+# Office Open XML word-processing document: an opaque ZIP the model can't read.
+# The handler converts it to searchable Markdown (see docx.py).
+DOCX_EXTS = {".docx"}
 # Source files we can compress to a signature-only skeleton (outline). Limited
 # to extensions the symbol parser (codeindex.LANGS) actually understands, so we
 # never promise an outline we can't produce.
@@ -53,6 +56,9 @@ CSV_MIN_BYTES = 4 * 1024
 
 # Below this a diff is small enough to read whole.
 DIFF_MIN_BYTES = 4 * 1024
+
+# Below this a .docx is trivially small; converting adds churn for no gain.
+DOCX_MIN_BYTES = 4 * 1024
 
 # Below this a source file is short enough to read whole; an outline of a tiny
 # file rarely beats just reading it.
@@ -152,6 +158,8 @@ def _kind_for(path: str) -> str:
         return "csv"
     if ext in DIFF_EXTS:
         return "diff"
+    if ext in DOCX_EXTS:
+        return "docx"
     if ext in CODE_EXTS:
         return "code"
     if ext in GENERIC_EXTS:
@@ -446,6 +454,44 @@ def optimize(
         res = OptimizeResult(True, "code", path, str(out), tokens_before,
                              tokens_after, cached=False,
                              note=f"{stats['symbols']} symbols ({stats['lang']})")
+
+    elif kind == "docx":
+        if os.path.getsize(path) < DOCX_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="docx already small")
+        key, out = cache.cache_paths(path, opts, ".docx.md")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "docx", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        try:
+            from .docx import docx_to_markdown
+            md, stats = docx_to_markdown(path)
+        except ImportError:
+            # Optional dep absent: fail-open, leave the file untouched.
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="python-docx not installed")
+        except Exception:  # any parser error -> passthrough, never crash the hook
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="docx parse failed")
+        md = _redact(md)
+        out.write_text(md, encoding="utf-8")
+        # Value here is access, not compression: a .docx is a binary ZIP the
+        # model can't read at all, and we convert it to Markdown of comparable
+        # length. So before == after — an honest zero-token "saving", with the
+        # real win being that the content becomes readable and quotable.
+        tokens_after = text_tokens(md)
+        tokens_before = tokens_after
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after,
+                              "paragraphs": stats["paragraphs"],
+                              "images": stats["images"]})
+        note = f"{stats['paragraphs']} paragraphs"
+        if stats["images"]:
+            note += f", {stats['images']} images flagged"
+        res = OptimizeResult(True, "docx", path, str(out), tokens_before,
+                             tokens_after, cached=False, note=note)
 
     else:  # image
         if os.path.getsize(path) < IMAGE_MIN_BYTES:

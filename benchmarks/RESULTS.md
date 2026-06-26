@@ -40,6 +40,14 @@ _Image note: native-vision models downscale to <=1568px anyway, so the byte savi
 | CSV (5,000 rows) | 57,340 | 237 | **-99%** |
 | delta re-read (1 edit in 600 lines) | 2,407 | 88 | **-96%** |
 
+## DOCX -> Markdown (conversion, not compression)
+
+A `.docx` is a binary ZIP the model cannot read at all, so there is no honest token 'before' to reduce against. The handler turns it into searchable, quotable Markdown — the win here is access, not size.
+
+| file | input bytes | paragraphs | readable tokens out |
+| --- | ---: | ---: | ---: |
+| sample-report.docx | 37,468 | 81 | 3,980 |
+
 ## Code index (read symbols, not files)
 
 Indexed **263 symbols** across **34 files**. Cost to locate a symbol, summed over 34 lookups:
