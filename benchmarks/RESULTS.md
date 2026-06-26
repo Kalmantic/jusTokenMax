@@ -7,15 +7,18 @@ _Token counts: Markdown side via `tiktoken/cl100k`; PDF 'before' via Anthropic p
 
 | file | pages | tokens before | tokens after | reduction |
 | --- | ---: | ---: | ---: | ---: |
-| 1706.03762.pdf | 15 | 37,074 | 14,574 | **-60%** |
-| fw9.pdf | 6 | 18,305 | 9,305 | **-49%** |
-| **total** | | **55,379** | **23,879** | **-56%** |
+| sample-10page.pdf | 10 | 21,960 | 6,960 | **-68%** |
+| sample-30page.pdf | 30 | 65,889 | 20,889 | **-68%** |
+| **total** | | **87,849** | **27,849** | **-68%** |
 
 ## Image compression
 
 | file | orig px | new px | bytes before | bytes after | bytes saved | base64 tokens before→after |
 | --- | --- | --- | ---: | ---: | ---: | ---: |
-| sample-screenshot.png | 3000x2000 | 1568x1045 | 186,295 | 106,802 | **-42%** | 62,098 → 35,600 |
+| _deckimg0.png | 32x32 | 32x32 | 114 | 292 | **--157%** | 38 → 97 |
+| _deckimg4.png | 32x32 | 32x32 | 116 | 293 | **--153%** | 38 → 97 |
+| _deckimg8.png | 32x32 | 32x32 | 114 | 293 | **--158%** | 38 → 97 |
+| sample-screenshot.png | 3000x2000 | 1568x1045 | 189,466 | 106,996 | **-43%** | 63,155 → 35,665 |
 
 _Image note: native-vision models downscale to <=1568px anyway, so the byte savings translate to token savings only in pipelines that inline images as base64._
 
@@ -40,12 +43,20 @@ _Image note: native-vision models downscale to <=1568px anyway, so the byte savi
 | CSV (5,000 rows) | 57,340 | 237 | **-99%** |
 | delta re-read (1 edit in 600 lines) | 2,407 | 88 | **-96%** |
 
+## PowerPoint (.pptx) — conversion, not compression
+
+A deck's text is already text, so tokens are preserved (before == after). The win is that an opaque binary deck becomes readable structured Markdown — titles, bullets, tables, speaker notes — with every dropped image/chart flagged per slide so visual-only slides never vanish silently.
+
+| input | slides | tables | images flagged | extracted tokens |
+| --- | ---: | ---: | ---: | ---: |
+| sample deck | 13 | 1 | 3 | 954 |
+
 ## Code index (read symbols, not files)
 
-Indexed **263 symbols** across **34 files**. Cost to locate a symbol, summed over 34 lookups:
+Indexed **554 symbols** across **49 files**. Cost to locate a symbol, summed over 49 lookups:
 
 | approach | tokens |
 | --- | ---: |
-| read each whole file | 29,945 |
-| one `justokenmax query` hit each | 854 |
-| **reduction** | **-97%** |
+| read each whole file | 72,002 |
+| one `justokenmax query` hit each | 1,213 |
+| **reduction** | **-98%** |

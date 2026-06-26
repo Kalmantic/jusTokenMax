@@ -22,6 +22,9 @@ NDJSON_EXTS = {".ndjson", ".jsonl"}
 NB_EXTS = {".ipynb"}
 CSV_EXTS = {".csv", ".tsv"}
 DIFF_EXTS = {".diff", ".patch"}
+# PowerPoint decks. Conversion (text is already text) — extract slide text,
+# tables, and speaker notes; flag dropped images/charts per slide.
+PPTX_EXTS = {".pptx"}
 # Source files we can compress to a signature-only skeleton (outline). Limited
 # to extensions the symbol parser (codeindex.LANGS) actually understands, so we
 # never promise an outline we can't produce.
@@ -53,6 +56,8 @@ CSV_MIN_BYTES = 4 * 1024
 
 # Below this a diff is small enough to read whole.
 DIFF_MIN_BYTES = 4 * 1024
+# Below this a .pptx is trivially small; extracting adds churn for no gain.
+PPTX_MIN_BYTES = 4 * 1024
 
 # Below this a source file is short enough to read whole; an outline of a tiny
 # file rarely beats just reading it.
@@ -152,6 +157,8 @@ def _kind_for(path: str) -> str:
         return "csv"
     if ext in DIFF_EXTS:
         return "diff"
+    if ext in PPTX_EXTS:
+        return "pptx"
     if ext in CODE_EXTS:
         return "code"
     if ext in GENERIC_EXTS:
@@ -446,6 +453,53 @@ def optimize(
         res = OptimizeResult(True, "code", path, str(out), tokens_before,
                              tokens_after, cached=False,
                              note=f"{stats['symbols']} symbols ({stats['lang']})")
+
+    elif kind == "pptx":
+        if os.path.getsize(path) < PPTX_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="pptx already small")
+        key, out = cache.cache_paths(path, opts, ".pptx.md")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "pptx", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        try:
+            from .pptx import pptx_to_markdown
+            md, stats = pptx_to_markdown(path)
+        except ImportError:
+            # Fail-open: the optional `office` extra (python-pptx) isn't
+            # installed, so leave the file untouched.
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="python-pptx not installed")
+        except Exception:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="pptx parse failed")
+        md = _redact(md)
+        out.write_text(md, encoding="utf-8")
+        # Conversion, not compression: the text was already text, so the token
+        # count is preserved (before == after). The value is reliable extraction
+        # plus honest per-slide flagging of dropped images/charts.
+        tokens = text_tokens(md)
+        cache.save_meta(key, {"tokens_before": tokens, "tokens_after": tokens,
+                              "slides": stats["slides"],
+                              "images": stats["images"],
+                              "charts": stats["charts"],
+                              "tables": stats["tables"],
+                              "notes": stats["notes"],
+                              "objects": stats["objects"]})
+        note = f"{stats['slides']} slide(s)"
+        flagged = []
+        if stats["images"]:
+            flagged.append(f"{stats['images']} images")
+        if stats["charts"]:
+            flagged.append(f"{stats['charts']} charts")
+        if stats["objects"]:
+            flagged.append(f"{stats['objects']} objects")
+        if flagged:
+            note += f", {' + '.join(flagged)} flagged"
+        res = OptimizeResult(True, "pptx", path, str(out), tokens, tokens,
+                             cached=False, note=note)
 
     else:  # image
         if os.path.getsize(path) < IMAGE_MIN_BYTES:
