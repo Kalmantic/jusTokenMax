@@ -4,6 +4,7 @@
     justokenmax pdf FILE            # force PDF -> markdown
     justokenmax image FILE          # force image / screenshot compression
     justokenmax logs FILE           # compress a verbose log
+    justokenmax xlsx FILE           # Excel .xlsx -> Markdown schema + sample
     justokenmax index [PATH]        # build the code symbol index
     justokenmax query TERM          # look up a symbol -> file:line + signature
     justokenmax stats               # lifetime savings ledger
@@ -63,7 +64,7 @@ def main(argv=None) -> int:
     common.add_argument("--max-edge", type=int, default=None,
                         help="override max image long edge (px)")
 
-    for name in ("optimize", "pdf", "image", "logs", "json"):
+    for name in ("optimize", "pdf", "image", "logs", "json", "xlsx"):
         sub.add_parser(name, parents=[common]).add_argument("files", nargs="+")
 
     pr = sub.add_parser("retrieve", help="get the original behind an optimized artifact")

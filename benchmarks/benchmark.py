@@ -373,6 +373,30 @@ def bench_csv():
     return tb, ta, (100 * (tb - ta) // tb if tb else 0)
 
 
+def bench_xlsx():
+    """XLSX is real compression, like CSV: a big sheet collapses to schema +
+    sample. 'before' is the whole workbook rendered as text (what dumping it into
+    context would cost). Returns None if openpyxl (the office extra) is absent."""
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        return None
+    from justokenmax.xlsx import xlsx_to_markdown
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sales"
+    ws.append(["id", "region", "rep", "amount", "active"])
+    for i in range(5000):
+        ws.append([i, ["APAC", "EMEA", "AMER"][i % 3], f"rep{i % 50}",
+                   round(i * 1.5, 2), i % 2 == 0])
+    path = os.path.join(FIXTURES, "sample-sheet.xlsx")
+    wb.save(path)
+    digest, full, _ = xlsx_to_markdown(path)
+    tb, ta = _count2(full), _count2(digest)
+    return tb, ta, (100 * (tb - ta) // tb if tb else 0)
+
+
 def bench_delta():
     import difflib
     base = [f"line {i}" for i in range(600)]
@@ -402,6 +426,7 @@ def main():
     json_rows = bench_json()
     nb_tb, nb_ta, nb_pct = bench_notebook()
     csv_tb, csv_ta, csv_pct = bench_csv()
+    xlsx_res = bench_xlsx()
     d_tb, d_ta, d_pct = bench_delta()
     idx = bench_index()
 
@@ -460,6 +485,10 @@ def main():
                  f"{human(nb_ta)} | **-{nb_pct}%** |")
     lines.append(f"| CSV (5,000 rows) | {human(csv_tb)} | {human(csv_ta)} | "
                  f"**-{csv_pct}%** |")
+    if xlsx_res:
+        x_tb, x_ta, x_pct = xlsx_res
+        lines.append(f"| XLSX (5,000 rows) | {human(x_tb)} | {human(x_ta)} | "
+                     f"**-{x_pct}%** |")
     lines.append(f"| delta re-read (1 edit in 600 lines) | {human(d_tb)} | "
                  f"{human(d_ta)} | **-{d_pct}%** |")
 

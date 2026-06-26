@@ -22,6 +22,9 @@ NDJSON_EXTS = {".ndjson", ".jsonl"}
 NB_EXTS = {".ipynb"}
 CSV_EXTS = {".csv", ".tsv"}
 DIFF_EXTS = {".diff", ".patch"}
+# Office Open XML spreadsheet: a binary ZIP. Like CSV, a big sheet collapses to
+# a schema + sample, so this genuinely compresses (see xlsx.py).
+XLSX_EXTS = {".xlsx"}
 # Source files we can compress to a signature-only skeleton (outline). Limited
 # to extensions the symbol parser (codeindex.LANGS) actually understands, so we
 # never promise an outline we can't produce.
@@ -50,6 +53,9 @@ JSON_SCHEMA_BYTES = 256 * 1024
 NDJSON_MIN_BYTES = 4 * 1024
 # Below this a CSV is small enough to read whole.
 CSV_MIN_BYTES = 4 * 1024
+
+# Below this an .xlsx is trivially small; digesting adds churn for no gain.
+XLSX_MIN_BYTES = 4 * 1024
 
 # Below this a diff is small enough to read whole.
 DIFF_MIN_BYTES = 4 * 1024
@@ -152,6 +158,8 @@ def _kind_for(path: str) -> str:
         return "csv"
     if ext in DIFF_EXTS:
         return "diff"
+    if ext in XLSX_EXTS:
+        return "xlsx"
     if ext in CODE_EXTS:
         return "code"
     if ext in GENERIC_EXTS:
@@ -446,6 +454,49 @@ def optimize(
         res = OptimizeResult(True, "code", path, str(out), tokens_before,
                              tokens_after, cached=False,
                              note=f"{stats['symbols']} symbols ({stats['lang']})")
+
+    elif kind == "xlsx":
+        if os.path.getsize(path) < XLSX_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="xlsx already small")
+        key, out = cache.cache_paths(path, opts, ".xlsx.md")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "xlsx", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        try:
+            from .xlsx import xlsx_to_markdown
+            digest, full_render, stats = xlsx_to_markdown(path)
+        except ImportError:
+            # Optional dep absent: fail-open, leave the file untouched.
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="openpyxl not installed")
+        except Exception:  # any parser error -> passthrough, never crash the hook
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="xlsx parse failed")
+        digest = _redact(digest)
+        out.write_text(digest, encoding="utf-8")
+        # Real compression: "before" is the whole workbook rendered as text (what
+        # dumping it into context would cost); "after" is the schema + sample.
+        tokens_before = text_tokens(full_render)
+        tokens_after = text_tokens(digest)
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after,
+                              "sheets": stats["sheets"],
+                              "total_rows": stats["total_rows"],
+                              "images": stats["images"],
+                              "charts": stats["charts"]})
+        note = f"{stats['sheets']} sheet(s), {stats['total_rows']} rows"
+        flagged = []
+        if stats["images"]:
+            flagged.append(f"{stats['images']} images")
+        if stats["charts"]:
+            flagged.append(f"{stats['charts']} charts")
+        if flagged:
+            note += f", {' + '.join(flagged)} flagged"
+        res = OptimizeResult(True, "xlsx", path, str(out), tokens_before,
+                             tokens_after, cached=False, note=note)
 
     else:  # image
         if os.path.getsize(path) < IMAGE_MIN_BYTES:

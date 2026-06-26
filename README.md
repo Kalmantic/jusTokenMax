@@ -223,6 +223,7 @@ Code hook) — see [`integrations/opencode/`](integrations/opencode/).
 | **Minified assets** | `.min.js` / `.min.css` & single-line packed blobs | stub to one line (`<minified asset, N bytes — retrieve for source>`) | **−99%** |
 | **Notebooks** | `.ipynb` files | drop base64 image outputs, truncate cell outputs, keep code + markdown | **−99%** |
 | **CSV / tabular** | large tables | header + inferred column types + sample rows + row count | **−99%** |
+| **Spreadsheets** | Excel `.xlsx` workbooks | per sheet: schema + inferred types + head/tail sample rows + row count; formulas read as cached values; dropped images/charts flagged | **−98%** |
 | **Git diffs** | lockfile/generated churn | keep code hunks, collapse lockfile/generated/minified file diffs to one line | lockfile → 1 line |
 | **Delta reads** | re-reading the same file | return only the diff since the last read, not the whole file | **−96%** |
 | **Redaction** | secrets & blobs in text | mask API keys/tokens/passwords, elide base64/data-URIs (tokens **+** safety) | safety + tokens |
@@ -263,6 +264,17 @@ JS/TS/Java via brace-aware scanners, others via regex) into a symbol map, so
 `justokenmax query parse_config` returns `file:line` + a full signature, and
 `justokenmax outline <file>` returns a file's shape with no bodies.
 
+**Spreadsheets.** An `.xlsx` is a binary ZIP, but once unpacked it's just tables
+— and a sheet with thousands of rows doesn't need every row in context. Like the
+CSV lever, jusTokenMax emits, per sheet, the schema (column names + inferred
+types), the row/column counts, and a head+tail sample, so a 5,000-row workbook
+collapses to a compact digest. Formula cells are read in data-only mode (the
+cached computed value, not the `=A1*B1` text); very wide sheets are column-capped;
+embedded images/charts are dropped but flagged with a marker. This is the one
+Office format that genuinely compresses — `python-docx`-style DOCX is conversion,
+but XLSX is real reduction. `openpyxl` is an optional dependency; without it the
+file passes through untouched.
+
 **Chat branching.** Every file read stays in context for the rest of the
 session. Branching runs a self-contained sub-task in a subagent whose context is
 discarded afterward, returning only a compact digest.
@@ -290,6 +302,7 @@ model at a conservative ~1,500 tokens/page. Full detail (regenerable) in
 | API response (2,000-row payload) | 168,023 | 374 | **−99%** |
 | notebook, 20 cells w/ image outputs | 401,170 | 610 | **−99%** |
 | CSV, 5,000 rows | 57,340 | 237 | **−99%** |
+| XLSX, 5,000 rows | 66,678 | 778 | **−98%** |
 | delta re-read, 1 edit in 600 lines | 2,407 | 88 | **−96%** |
 
 **Code index** — locating a symbol vs reading the file, over 21 lookups in
@@ -354,8 +367,8 @@ justokenmax config enable pdf         # back on
 JUSTOKENMAX_DISABLE=pdf,image justokenmax optimize x.pdf   # one-off, via env
 ```
 
-Kinds: `pdf image log json notebook csv diff redact`. A disabled kind is skipped
-by `optimize()` and left untouched by the Read hook.
+Kinds: `pdf image log json notebook csv diff xlsx redact`. A disabled kind is
+skipped by `optimize()` and left untouched by the Read hook.
 
 ### Plugin surface
 
@@ -391,7 +404,7 @@ open. Secrets and base64 blobs are masked inside every text digest.
 
 ```bash
 cd python && pip install -e . pytest pdfplumber
-pytest -q      # pdf, image, log, json, notebook, csv, diff, delta, redact, code-index, outline, optimize, cli, hook, mcp
+pytest -q      # pdf, image, log, json, notebook, csv, diff, xlsx, delta, redact, code-index, outline, optimize, cli, hook, mcp
 ```
 
 ## Results — measured savings
@@ -432,7 +445,7 @@ funds OCR, more languages, and the roadmap. Thank you 🙏
 
 ## Roadmap
 
-OCR for scanned PDFs, DOCX/PPTX/HTML inputs, even deeper multi-language parsing, a
+OCR for scanned PDFs, DOCX/PPTX/HTML inputs (Excel `.xlsx` is **done**), even deeper multi-language parsing, a
 diff-mode lockfile path, a `learn` loop that mines sessions for durable
 corrections, and PyPI/npm publishing. (Cross-agent `install`/`uninstall`, the
 OpenCode plugin, and the MCP compression proxy are **done**.) PRs welcome.
