@@ -180,3 +180,24 @@ def test_no_image_marker_for_text_only_docx(tmp_path):
     md, stats = docx_to_markdown(str(p))
     assert "not extracted" not in md
     assert stats["images"] == 0
+
+
+# ---- safety cap & real fail-open (parity with the PDF handler) ----
+
+def test_output_size_cap_truncates(tmp_path, monkeypatch):
+    from justokenmax import docx as docx_mod
+
+    monkeypatch.setattr(docx_mod, "MAX_OUTPUT_CHARS", 20)
+    p = tmp_path / "report.docx"
+    _build_docx(p)
+    md, _ = docx_to_markdown(str(p))
+    assert "truncated" in md
+
+
+def test_real_corrupt_file_fails_open(tmp_path):
+    # A genuinely broken .docx (not a monkeypatched raise): python-docx raises on
+    # load, and optimize() must skip rather than crash the Read hook.
+    p = tmp_path / "broken.docx"
+    p.write_bytes(b"PK\x03\x04 not actually a valid docx " * 200)
+    res = optimize(str(p))
+    assert res.ok is False and res.kind == "skip"
