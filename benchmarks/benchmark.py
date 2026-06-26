@@ -346,6 +346,59 @@ def _count2(text):
     return count_text_tokens(text)[0]
 
 
+def _build_sample_docx(path: str):
+    """A representative multi-section report with headings, prose, and a table."""
+    from docx import Document
+
+    doc = Document()
+    doc.add_heading("Quarterly Business Review", level=1)
+    for i in range(40):
+        doc.add_heading(f"Section {i}", level=2)
+        doc.add_paragraph(_PROSE)
+    table = doc.add_table(rows=6, cols=4)
+    for r in range(6):
+        for c in range(4):
+            table.cell(r, c).text = f"r{r}c{c}"
+    doc.save(path)
+
+
+def bench_docx():
+    """DOCX is conversion, not compression.
+
+    A .docx is a binary ZIP the model cannot read at all, so there is no honest
+    'before' token count to reduce against — reporting a percentage here would
+    be misleading. We report the input size and the readable tokens produced,
+    because the win for this format is access, not size.
+
+    Like the PDF bench, this runs on any real `.docx` files dropped into
+    ``benchmarks/fixtures/`` (gitignored — bring your own, e.g. Microsoft's
+    markitdown test corpus); if none are present it generates one representative
+    sample so the benchmark runs out of the box.
+    """
+    try:
+        from docx import Document  # noqa: F401 — probe the optional dep
+    except ImportError:
+        return None  # optional dep absent; skip rather than fail the run
+    from justokenmax.docx import docx_to_markdown
+
+    paths = sorted(glob.glob(os.path.join(FIXTURES, "*.docx")))
+    if not paths:
+        path = os.path.join(FIXTURES, "sample-report.docx")
+        _build_sample_docx(path)
+        paths = [path]
+
+    rows = []
+    for path in paths:
+        try:
+            md, st = docx_to_markdown(path)
+        except Exception as e:  # skip an unreadable file, keep the run going
+            print(f"  (skip docx) {path}: {e}")
+            continue
+        rows.append((os.path.basename(path), os.path.getsize(path),
+                     st["paragraphs"], _count2(md)))
+    return rows
+
+
 def bench_notebook():
     import json as _json
     from justokenmax.notebook import notebook_to_markdown
@@ -403,6 +456,7 @@ def main():
     nb_tb, nb_ta, nb_pct = bench_notebook()
     csv_tb, csv_ta, csv_pct = bench_csv()
     d_tb, d_ta, d_pct = bench_delta()
+    docx_res = bench_docx()
     idx = bench_index()
 
     lines = []
@@ -462,6 +516,17 @@ def main():
                  f"**-{csv_pct}%** |")
     lines.append(f"| delta re-read (1 edit in 600 lines) | {human(d_tb)} | "
                  f"{human(d_ta)} | **-{d_pct}%** |")
+
+    if docx_res:
+        lines.append("\n## DOCX -> Markdown (conversion, not compression)\n")
+        lines.append("A `.docx` is a binary ZIP the model cannot read at all, so "
+                     "there is no honest token 'before' to reduce against. The "
+                     "handler turns it into searchable, quotable Markdown — the "
+                     "win here is access, not size.\n")
+        lines.append("| file | input bytes | paragraphs | readable tokens out |")
+        lines.append("| --- | ---: | ---: | ---: |")
+        for name, db, dp, dt in docx_res:
+            lines.append(f"| {name} | {human(db)} | {dp} | {human(dt)} |")
 
     lines.append("\n## Code index (read symbols, not files)\n")
     lines.append(f"Indexed **{human(idx['symbols'])} symbols** across "

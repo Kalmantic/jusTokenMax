@@ -223,6 +223,7 @@ Code hook) — see [`integrations/opencode/`](integrations/opencode/).
 | **Minified assets** | `.min.js` / `.min.css` & single-line packed blobs | stub to one line (`<minified asset, N bytes — retrieve for source>`) | **−99%** |
 | **Notebooks** | `.ipynb` files | drop base64 image outputs, truncate cell outputs, keep code + markdown | **−99%** |
 | **CSV / tabular** | large tables | header + inferred column types + sample rows + row count | **−99%** |
+| **Office documents** | Word `.docx` files | headings, paragraphs & tables → Markdown in document order; dropped images flagged with a marker (comments/tracked-changes dropped) | conversion — access, not size |
 | **Git diffs** | lockfile/generated churn | keep code hunks, collapse lockfile/generated/minified file diffs to one line | lockfile → 1 line |
 | **Delta reads** | re-reading the same file | return only the diff since the last read, not the whole file | **−96%** |
 | **Redaction** | secrets & blobs in text | mask API keys/tokens/passwords, elide base64/data-URIs (tokens **+** safety) | safety + tokens |
@@ -251,6 +252,17 @@ text-first extraction is the right default; the only case it can't serve is a
 **scanned/image-only** PDF (no text layer), which is exactly where OCR comes in
 (on the roadmap). And if you'd rather it never touch PDFs, `justokenmax config
 disable pdf`.
+
+**Office documents.** A `.docx` is an Office Open XML ZIP — opaque bytes the
+model can't read at all. jusTokenMax walks the document in source order and
+emits headings, paragraphs and tables as Markdown. Comments and tracked changes
+are dropped; images are dropped too but **flagged with a marker** so the omission
+isn't silent (the same approach pdf.py takes per page). Unlike the other levers
+this is **conversion, not compression**: the extracted text is about the same
+size as the original prose,
+so it claims no token "saving" — the win is that an unreadable binary becomes
+searchable and quotable. `python-docx` is an optional dependency; without it the
+file is passed through untouched.
 
 **Logs.** Build/test/CI output is mostly noise: ANSI codes, progress spam, the
 same line hundreds of times, 50-frame stack traces. jusTokenMax digests it —
@@ -354,8 +366,8 @@ justokenmax config enable pdf         # back on
 JUSTOKENMAX_DISABLE=pdf,image justokenmax optimize x.pdf   # one-off, via env
 ```
 
-Kinds: `pdf image log json notebook csv diff redact`. A disabled kind is skipped
-by `optimize()` and left untouched by the Read hook.
+Kinds: `pdf image log json notebook csv diff docx redact`. A disabled kind is
+skipped by `optimize()` and left untouched by the Read hook.
 
 ### Plugin surface
 
@@ -375,6 +387,9 @@ by `optimize()` and left untouched by the Read hook.
 - **No OCR.** Scanned / image-only PDFs have no text layer → empty Markdown;
   jusTokenMax detects no saving and passes the original through.
 - **PDF per-page tokens are a conservative model**, not a billed number.
+- **DOCX is conversion, not compression.** A `.docx` is unreadable binary, so
+  there is no token saving to claim — the win is access. The ledger reports
+  before == after for these files, honestly.
 - **Image token savings are base64-pipeline only** (native vision downscales
   regardless); the always-real image win is bytes.
 - **The code index is a snapshot**, not live — re-run `justokenmax index` after
@@ -391,7 +406,7 @@ open. Secrets and base64 blobs are masked inside every text digest.
 
 ```bash
 cd python && pip install -e . pytest pdfplumber
-pytest -q      # pdf, image, log, json, notebook, csv, diff, delta, redact, code-index, outline, optimize, cli, hook, mcp
+pytest -q      # pdf, image, log, json, notebook, csv, diff, docx, delta, redact, code-index, outline, optimize, cli, hook, mcp
 ```
 
 ## Results — measured savings
@@ -432,7 +447,7 @@ funds OCR, more languages, and the roadmap. Thank you 🙏
 
 ## Roadmap
 
-OCR for scanned PDFs, DOCX/PPTX/HTML inputs, even deeper multi-language parsing, a
+OCR for scanned PDFs, PPTX/XLSX/HTML inputs (Word `.docx` is **done**), even deeper multi-language parsing, a
 diff-mode lockfile path, a `learn` loop that mines sessions for durable
 corrections, and PyPI/npm publishing. (Cross-agent `install`/`uninstall`, the
 OpenCode plugin, and the MCP compression proxy are **done**.) PRs welcome.

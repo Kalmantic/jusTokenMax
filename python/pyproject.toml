@@ -21,6 +21,9 @@ tables = ["pdfplumber>=0.11"]
 # Accurate token counting via the real tokenizer. Optional so the base install
 # stays light; tokens.py silently falls back to len//4 when it is absent.
 accurate = ["tiktoken>=0.7"]
+# Office document handlers. Optional and imported inside the dispatch branch, so
+# a missing library makes optimize() skip the file (fail-open) rather than error.
+office = ["python-docx>=1.0"]
 
 [project.scripts]
 justokenmax = "justokenmax.cli:main"
