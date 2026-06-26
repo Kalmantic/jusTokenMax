@@ -299,7 +299,9 @@ HTML uses only the standard library (`html.parser`) — **no new dependency** �
 drops scripts/styles/navigation chrome while preserving the content skeleton
 (heading hierarchy, lists, tables, code, links) as Markdown. It also catches HTML
 delivered without a `.html` name (saved `.txt` / no extension) by sniffing the
-opening tag.
+opening tag. When a page is JS/SVG/canvas-rendered and static extraction would
+yield almost nothing, it **fails open and leaves the original** rather than
+replace it with an empty digest (so the agent can still read the raw page).
 
 **Code index** — locating a symbol vs reading the file, over 21 lookups in
 jusTokenMax's own source: **16,691 → 486 tokens (−97%)**. **Images** — 3000×2000

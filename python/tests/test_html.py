@@ -209,6 +209,41 @@ def test_boilerplate_chrome_dropped():
     assert "copyright 2026" not in md
 
 
+# ---- SVG (flag, like images) ----
+
+def test_svg_diagram_is_flagged():
+    md, stats = html_to_markdown(
+        "<body><p>real prose here</p>"
+        "<svg><text>node A</text><text>node B</text></svg></body>")
+    assert stats["svgs"] == 1
+    assert "diagram(s)/SVG not extracted" in md
+    assert "real prose here" in md          # the prose still extracts
+
+
+# ---- low-yield guard (JS/SVG/canvas pages -> fail open, keep the original) ----
+
+def test_low_yield_js_app_page_fails_open(tmp_path):
+    # A JS-rendered app: a big <script> and an empty root, almost no static text.
+    # Replacing it with a near-empty digest would lose the page, so optimize()
+    # must fail open and leave the original for the agent to read raw.
+    p = tmp_path / "app.html"
+    p.write_text("<!doctype html><html><head><title>App</title></head><body>"
+                 "<div id='root'></div>"
+                 "<script>" + "renderApp();" * 800 + "</script>"
+                 "</body></html>", encoding="utf-8")
+    res = optimize(str(p))
+    assert res.ok is False and res.kind == "skip"
+    assert "little" in res.note.lower() or "js" in res.note.lower()
+
+
+def test_content_page_is_not_skipped_by_guard(tmp_path):
+    # A real content page must still be compressed (guard only catches near-empty).
+    p = tmp_path / "page.html"
+    p.write_text(_PAGE, encoding="utf-8")
+    res = optimize(str(p))
+    assert res.ok and res.kind == "html"
+
+
 # ---- images ----
 
 def test_images_flagged_and_counted():

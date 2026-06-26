@@ -15,12 +15,19 @@ Boilerplate removal is deliberately tag-based (drop nav/header/footer/aside),
 never content-scored — so the main content tree is always preserved. Pages built
 as div-soup with no semantic tags keep more chrome (a stated limitation).
 
+Inline <svg> diagrams are dropped but flagged (like images), and JS-rendered
+pages can't be parsed statically — when extraction yields almost nothing the
+dispatch fails open and leaves the original (see HTML_MIN_YIELD_TOKENS), so the
+agent can still read the raw page rather than getting an empty digest.
+
 Known limitations (degrade gracefully, never crash):
   * Table colspan/rowspan are ignored — spanning cells pad with blanks rather
     than truly span, so wide spans can look ragged.
   * A table's first row is treated as the header even without <th>.
   * <meta charset> is not honored; input is read as UTF-8.
-  * JavaScript-rendered content is invisible (static HTML only).
+  * JavaScript-rendered content is invisible (static HTML only) — detected via
+    the low-yield guard and left as-is, never rendered (no browser engine).
+  * Inline SVG text (e.g. flowchart labels) is flagged, not extracted.
   * A non-page fragment that happens to start with `<html` (e.g. a template
     snippet saved as .txt) can be sniffed as HTML.
 """
@@ -71,6 +78,7 @@ class _Extractor(HTMLParser):
         self.pre_buf: List[str] = []    # raw text inside <pre> (whitespace kept)
         self.list_depth = 0
         self.images = 0
+        self.svgs = 0                   # inline SVG diagrams (dropped, flagged)
         self.tables = 0
         self.saw_tag = False
         self._href = ""
@@ -110,6 +118,8 @@ class _Extractor(HTMLParser):
         if tag == "title":
             self.in_title = True
             return
+        if tag == "svg" and not self.skip:
+            self.svgs += 1          # flag the diagram (its subtree is dropped)
         if self._drop(tag):
             self.skip += 1
             return
@@ -279,14 +289,20 @@ class _Extractor(HTMLParser):
         body = "\n\n".join(self.out)
         head = f"# {self.title.strip()}\n\n" if self.title.strip() else ""
         md = (head + body).strip()
+        parts = []
         if self.images:
-            md += (f"\n\n> _[justokenmax: {self.images} image(s) not extracted — "
+            parts.append(f"{self.images} image(s)")
+        if self.svgs:
+            parts.append(f"{self.svgs} diagram(s)/SVG")
+        if parts:
+            md += (f"\n\n> _[justokenmax: {' and '.join(parts)} not extracted — "
                    "read the source if visual data matters]_")
         md = md + "\n"
         if len(md) > MAX_OUTPUT_CHARS:
             md = md[:MAX_OUTPUT_CHARS] + _TRUNCATED
         return md, {"ok": self.saw_tag, "blocks": len(self.out),
-                    "images": self.images, "tables": self.tables}
+                    "images": self.images, "svgs": self.svgs,
+                    "tables": self.tables}
 
 
 def html_to_markdown(raw: str) -> Tuple[str, dict]:

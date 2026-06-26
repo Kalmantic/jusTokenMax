@@ -58,6 +58,10 @@ CSV_MIN_BYTES = 4 * 1024
 DIFF_MIN_BYTES = 4 * 1024
 # Below this an HTML page is small enough to read whole.
 HTML_MIN_BYTES = 4 * 1024
+# If a non-trivial page yields fewer than this many tokens, its content isn't in
+# the static HTML (JS/SVG/canvas-rendered). Replacing it with a near-empty digest
+# would lose the page, so we fail open and leave the original.
+HTML_MIN_YIELD_TOKENS = 64
 
 # Below this a source file is short enough to read whole; an outline of a tiny
 # file rarely beats just reading it.
@@ -451,9 +455,15 @@ def optimize(
             return OptimizeResult(False, "skip", path, None, 0, 0, False,
                                   note="not HTML")
         digest = _redact(digest)            # also elides inline data-URIs/base64
-        out.write_text(digest, encoding="utf-8")
         tokens_before = text_tokens(raw)
         tokens_after = text_tokens(digest)
+        if tokens_after < HTML_MIN_YIELD_TOKENS:
+            # Near-empty extraction: the content is JS/SVG/canvas-rendered, not in
+            # the static HTML. Leave the original so the agent can read it raw.
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="html yields too little text "
+                                       "(likely JS/SVG-rendered) — left as-is")
+        out.write_text(digest, encoding="utf-8")
         cache.save_meta(key, {"tokens_before": tokens_before,
                               "tokens_after": tokens_after,
                               "blocks": stats["blocks"],
