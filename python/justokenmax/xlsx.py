@@ -29,10 +29,22 @@ TYPE_SCAN = 200
 
 _TRUNCATED = "\n\n> _[justokenmax: output truncated — workbook exceeds safety caps]_\n"
 
-# Embedded images/charts are dropped — we extract tabular text only. Flag them
-# at the workbook level so visual content isn't lost silently (mirrors pdf.py).
-_IMG_NOTE = ("> _[justokenmax: {n} image(s) in this workbook not extracted — "
-             "read the source if visual data matters]_")
+# Embedded images and charts are dropped — we extract tabular text only. Flag
+# them at the workbook level so visual content isn't lost silently (mirrors
+# pdf.py). Charts are a distinct, common case: a financial model's chart is its
+# whole point, yet it carries no row data, so without this it vanishes silently.
+def _visual_note(images: int, charts: int) -> str:
+    """Build the dropped-visual marker from whatever is present. Keeps the
+    'image(s) in this workbook not extracted' phrasing when images exist so the
+    note reads naturally for the common image-only case."""
+    parts = []
+    if images:
+        parts.append(f"{images} image(s)")
+    if charts:
+        parts.append(f"{charts} chart(s)")
+    what = " and ".join(parts)
+    return (f"> _[justokenmax: {what} in this workbook not extracted — "
+            "read the source if visual data matters]_")
 
 
 def _count_images(path: str) -> int:
@@ -41,6 +53,17 @@ def _count_images(path: str) -> int:
     try:
         with zipfile.ZipFile(path) as z:
             return sum(1 for n in z.namelist() if n.startswith("xl/media/"))
+    except Exception:
+        return 0
+
+
+def _count_charts(path: str) -> int:
+    """Charts live as xl/charts/chartN.xml members in the .xlsx ZIP (separate
+    from xl/media/, so the image count never sees them). Fail-open: 0 on error."""
+    try:
+        with zipfile.ZipFile(path) as z:
+            return sum(1 for n in z.namelist()
+                       if n.startswith("xl/charts/chart") and n.endswith(".xml"))
     except Exception:
         return 0
 
@@ -178,8 +201,9 @@ def xlsx_to_markdown(path: str) -> Tuple[str, str, dict]:
         wb.close()
 
     images = _count_images(path)
-    if images:
-        digest_parts.append(_IMG_NOTE.format(n=images))
+    charts = _count_charts(path)
+    if images or charts:
+        digest_parts.append(_visual_note(images, charts))
 
     digest = "\n".join(digest_parts).strip() + "\n"
     if len(digest) > MAX_OUTPUT_CHARS:
@@ -187,4 +211,4 @@ def xlsx_to_markdown(path: str) -> Tuple[str, str, dict]:
     full_render = "\n".join(full_parts).strip() + "\n"
 
     return digest, full_render, {"sheets": sheets, "total_rows": total_rows,
-                                 "images": images}
+                                 "images": images, "charts": charts}

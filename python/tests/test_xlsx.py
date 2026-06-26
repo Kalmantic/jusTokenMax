@@ -249,6 +249,31 @@ def test_image_count_is_exact(tmp_path):
     assert stats["images"] == 2
 
 
+def test_flags_charts_not_extracted(tmp_path):
+    # Charts live in xl/charts/, never xl/media/, so the image count can't see
+    # them. A chart carries no row data — without this flag it vanishes silently.
+    from openpyxl import Workbook
+    from openpyxl.chart import BarChart, Reference
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Numbers"
+    ws.append(["month", "sales"])
+    for i in range(1, 6):
+        ws.append([f"m{i}", i * 10])
+    chart = BarChart()
+    data = Reference(ws, min_col=2, min_row=1, max_row=6)
+    chart.add_data(data, titles_from_data=True)
+    ws.add_chart(chart, "E2")
+    p = tmp_path / "charted.xlsx"
+    wb.save(str(p))
+
+    digest, _, stats = xlsx_to_markdown(str(p))
+    assert stats["charts"] == 1
+    assert stats["images"] == 0          # a chart is not an image
+    assert "1 chart(s) in this workbook not extracted" in digest
+
+
 def test_real_corrupt_file_fails_open(tmp_path):
     # A genuinely broken .xlsx (not a monkeypatched raise): openpyxl raises on
     # load, and optimize() must skip rather than crash the Read hook.

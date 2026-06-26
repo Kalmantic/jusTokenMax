@@ -223,7 +223,7 @@ Code hook) — see [`integrations/opencode/`](integrations/opencode/).
 | **Minified assets** | `.min.js` / `.min.css` & single-line packed blobs | stub to one line (`<minified asset, N bytes — retrieve for source>`) | **−99%** |
 | **Notebooks** | `.ipynb` files | drop base64 image outputs, truncate cell outputs, keep code + markdown | **−99%** |
 | **CSV / tabular** | large tables | header + inferred column types + sample rows + row count | **−99%** |
-| **Spreadsheets** | Excel `.xlsx` workbooks | per sheet: schema + inferred types + head/tail sample rows + row count; formulas read as cached values; dropped images flagged | **−98%** |
+| **Spreadsheets** | Excel `.xlsx` workbooks | per sheet: schema + inferred types + head/tail sample rows + row count; formulas read as cached values; dropped images/charts flagged | **−98%** |
 | **Git diffs** | lockfile/generated churn | keep code hunks, collapse lockfile/generated/minified file diffs to one line | lockfile → 1 line |
 | **Delta reads** | re-reading the same file | return only the diff since the last read, not the whole file | **−96%** |
 | **Redaction** | secrets & blobs in text | mask API keys/tokens/passwords, elide base64/data-URIs (tokens **+** safety) | safety + tokens |

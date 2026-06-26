@@ -485,10 +485,16 @@ def optimize(
                               "tokens_after": tokens_after,
                               "sheets": stats["sheets"],
                               "total_rows": stats["total_rows"],
-                              "images": stats["images"]})
+                              "images": stats["images"],
+                              "charts": stats["charts"]})
         note = f"{stats['sheets']} sheet(s), {stats['total_rows']} rows"
+        flagged = []
         if stats["images"]:
-            note += f", {stats['images']} images flagged"
+            flagged.append(f"{stats['images']} images")
+        if stats["charts"]:
+            flagged.append(f"{stats['charts']} charts")
+        if flagged:
+            note += f", {' + '.join(flagged)} flagged"
         res = OptimizeResult(True, "xlsx", path, str(out), tokens_before,
                              tokens_after, cached=False, note=note)
 
