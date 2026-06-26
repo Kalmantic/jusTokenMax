@@ -373,6 +373,24 @@ def bench_csv():
     return tb, ta, (100 * (tb - ta) // tb if tb else 0)
 
 
+def bench_html():
+    """A real web page is mostly script/style/nav chrome — dropping it while
+    keeping the content skeleton is genuine compression. Stdlib parser, no dep."""
+    from justokenmax.html import html_to_markdown
+    page = ("<!doctype html><html><head><title>Guide</title>"
+            "<style>" + ".cls{color:#abc}" * 600 + "</style>"
+            "<script>" + "analytics.track();" * 600 + "</script></head><body>"
+            "<nav>" + "<a href='/'>menu</a>" * 40 + "</nav>"
+            "<main><h1>Heading</h1>" +
+            "<p>A real sentence of body content worth keeping.</p>" * 60 +
+            "<table><tr><th>K</th><th>V</th></tr>" +
+            "<tr><td>row</td><td>val</td></tr>" * 10 + "</table></main>"
+            "<footer>" + "<a href='/x'>foot</a>" * 30 + "</footer></body></html>")
+    md, _ = html_to_markdown(page)
+    tb, ta = _count2(page), _count2(md)
+    return tb, ta, (100 * (tb - ta) // tb if tb else 0)
+
+
 def bench_delta():
     import difflib
     base = [f"line {i}" for i in range(600)]
@@ -403,6 +421,7 @@ def main():
     nb_tb, nb_ta, nb_pct = bench_notebook()
     csv_tb, csv_ta, csv_pct = bench_csv()
     d_tb, d_ta, d_pct = bench_delta()
+    h_tb, h_ta, h_pct = bench_html()
     idx = bench_index()
 
     lines = []
@@ -462,6 +481,8 @@ def main():
                  f"**-{csv_pct}%** |")
     lines.append(f"| delta re-read (1 edit in 600 lines) | {human(d_tb)} | "
                  f"{human(d_ta)} | **-{d_pct}%** |")
+    lines.append(f"| HTML page (script/style/nav chrome) | {human(h_tb)} | "
+                 f"{human(h_ta)} | **-{h_pct}%** |")
 
     lines.append("\n## Code index (read symbols, not files)\n")
     lines.append(f"Indexed **{human(idx['symbols'])} symbols** across "

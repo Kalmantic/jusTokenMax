@@ -22,6 +22,9 @@ NDJSON_EXTS = {".ndjson", ".jsonl"}
 NB_EXTS = {".ipynb"}
 CSV_EXTS = {".csv", ".tsv"}
 DIFF_EXTS = {".diff", ".patch"}
+# HTML pages. Compression (drop scripts/styles/chrome, keep the content skeleton
+# as Markdown) — stdlib parser, no dependency.
+HTML_EXTS = {".html", ".htm"}
 # Source files we can compress to a signature-only skeleton (outline). Limited
 # to extensions the symbol parser (codeindex.LANGS) actually understands, so we
 # never promise an outline we can't produce.
@@ -53,6 +56,12 @@ CSV_MIN_BYTES = 4 * 1024
 
 # Below this a diff is small enough to read whole.
 DIFF_MIN_BYTES = 4 * 1024
+# Below this an HTML page is small enough to read whole.
+HTML_MIN_BYTES = 4 * 1024
+# If a non-trivial page yields fewer than this many tokens, its content isn't in
+# the static HTML (JS/SVG/canvas-rendered). Replacing it with a near-empty digest
+# would lose the page, so we fail open and leave the original.
+HTML_MIN_YIELD_TOKENS = 64
 
 # Below this a source file is short enough to read whole; an outline of a tiny
 # file rarely beats just reading it.
@@ -105,6 +114,11 @@ def _sniff(path: str) -> str:
     from .jsoncompress import looks_like_json
     if looks_like_json(head):
         return "json"
+    # HTML delivered without a .html name (saved as .txt / no extension): a lot
+    # of agent-context HTML arrives this way. Gate on a clear markup opener so a
+    # plain text file that merely mentions <html> isn't misrouted.
+    if head.lstrip()[:200].lower().lstrip("﻿").startswith(("<!doctype html", "<html")):
+        return "html"
     # Minified/packed asset: a single physical line far longer than any source.
     from .lockfile import looks_minified
     if looks_minified(head, path):
@@ -152,6 +166,8 @@ def _kind_for(path: str) -> str:
         return "csv"
     if ext in DIFF_EXTS:
         return "diff"
+    if ext in HTML_EXTS:
+        return "html"
     if ext in CODE_EXTS:
         return "code"
     if ext in GENERIC_EXTS:
@@ -415,6 +431,49 @@ def optimize(
                              tokens_after, cached=False,
                              note=f"{stats['files_elided']}/{stats['files_total']} "
                                   f"files elided")
+
+    elif kind == "html":
+        if os.path.getsize(path) < HTML_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="html already small")
+        key, out = cache.cache_paths(path, opts, ".html.md")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "html", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .html import html_to_markdown
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        try:
+            digest, stats = html_to_markdown(raw)
+        except Exception:
+            # Fail-open: the Read hook must never crash on pathological input.
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="html parse failed")
+        if not stats.get("ok"):
+            # Fail-open: no markup found -> not actually HTML.
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="not HTML")
+        digest = _redact(digest)            # also elides inline data-URIs/base64
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        if tokens_after < HTML_MIN_YIELD_TOKENS:
+            # Near-empty extraction: the content is JS/SVG/canvas-rendered, not in
+            # the static HTML. Leave the original so the agent can read it raw.
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="html yields too little text "
+                                       "(likely JS/SVG-rendered) — left as-is")
+        out.write_text(digest, encoding="utf-8")
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after,
+                              "blocks": stats["blocks"],
+                              "images": stats["images"],
+                              "tables": stats["tables"]})
+        note = f"{stats['blocks']} blocks, {stats['tables']} tables"
+        if stats["images"]:
+            note += f", {stats['images']} images flagged"
+        res = OptimizeResult(True, "html", path, str(out), tokens_before,
+                             tokens_after, cached=False, note=note)
 
     elif kind == "code":
         if os.path.getsize(path) < CODE_MIN_BYTES:
