@@ -169,6 +169,27 @@ def test_minified_dispatch_stub(min_js):
     assert cache.lookup_origin(res.output) == min_js
 
 
+def test_junit_xml_dispatch_summarizes_failures(big_junit_xml):
+    res = optimize(big_junit_xml)
+    assert res.ok and res.kind == "junit"
+    assert res.output.endswith(".junit.md")
+    assert res.tokens_saved > 0
+    digest = Path(res.output).read_text(encoding="utf-8")
+    assert "testcases: 302" in digest
+    assert "failure: pkg.TestSuite.test_failure" in digest
+    assert "skipped: pkg.TestSuite.test_skipped" in digest
+    assert "test_ok_299" not in digest
+    assert cache.lookup_origin(res.output) == big_junit_xml
+
+
+def test_non_junit_xml_skipped(tmp_path):
+    p = tmp_path / "feed.xml"
+    p.write_text("<root>" + "<item>hello</item>" * 2000 + "</root>")
+    res = optimize(str(p))
+    assert res.ok is False
+    assert res.kind == "skip"
+
+
 def test_small_image_skipped(small_image):
     res = optimize(small_image)
     assert res.ok is False

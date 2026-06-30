@@ -22,6 +22,7 @@ NDJSON_EXTS = {".ndjson", ".jsonl"}
 NB_EXTS = {".ipynb"}
 CSV_EXTS = {".csv", ".tsv"}
 DIFF_EXTS = {".diff", ".patch"}
+XML_EXTS = {".xml"}
 # Source files we can compress to a signature-only skeleton (outline). Limited
 # to extensions the symbol parser (codeindex.LANGS) actually understands, so we
 # never promise an outline we can't produce.
@@ -152,6 +153,8 @@ def _kind_for(path: str) -> str:
         return "csv"
     if ext in DIFF_EXTS:
         return "diff"
+    if ext in XML_EXTS:
+        return "junit"
     if ext in CODE_EXTS:
         return "code"
     if ext in GENERIC_EXTS:
@@ -415,6 +418,33 @@ def optimize(
                              tokens_after, cached=False,
                              note=f"{stats['files_elided']}/{stats['files_total']} "
                                   f"files elided")
+
+    elif kind == "junit":
+        if os.path.getsize(path) < JSON_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="JUnit XML already small")
+        key, out = cache.cache_paths(path, opts, ".junit.md")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "junit", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .junitxml import compress_junit_xml
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        digest, stats = compress_junit_xml(raw)
+        if not stats.get("ok"):
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note=stats.get("note", "not JUnit XML"))
+        digest = _redact(digest)
+        out.write_text(digest, encoding="utf-8")
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after})
+        res = OptimizeResult(True, "junit", path, str(out), tokens_before,
+                             tokens_after, cached=False,
+                             note=f"{stats['testcases']} cases, "
+                                  f"{stats['interesting']} notable")
 
     elif kind == "code":
         if os.path.getsize(path) < CODE_MIN_BYTES:
