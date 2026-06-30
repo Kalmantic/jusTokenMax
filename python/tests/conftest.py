@@ -201,6 +201,42 @@ def min_js(tmp_path):
 
 
 @pytest.fixture
+def big_sarif(tmp_path):
+    import json
+    results = []
+    for i in range(250):
+        results.append({
+            "ruleId": "no-eval" if i % 2 == 0 else "sql-injection",
+            "level": "error" if i % 3 == 0 else "warning",
+            "message": {"text": "Finding message " + ("details " * 80)},
+            "locations": [{
+                "physicalLocation": {
+                    "artifactLocation": {"uri": f"src/file{i % 12}.js"},
+                    "region": {"startLine": i + 1},
+                }
+            }],
+            "partialFingerprints": {"primaryLocationLineHash": "x" * 80},
+        })
+    data = {
+        "version": "2.1.0",
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+        "runs": [{
+            "tool": {"driver": {
+                "name": "ExampleScanner",
+                "rules": [
+                    {"id": "no-eval", "shortDescription": {"text": "No eval"}},
+                    {"id": "sql-injection", "shortDescription": {"text": "SQL"}},
+                ],
+            }},
+            "results": results,
+        }],
+    }
+    p = tmp_path / "scan.sarif"
+    p.write_text(json.dumps(data, indent=2))
+    return str(p)
+
+
+@pytest.fixture
 def big_csv(tmp_path):
     rows = ["id,name,score"]
     rows += [f"{i},name{i},{i * 1.5}" for i in range(2000)]

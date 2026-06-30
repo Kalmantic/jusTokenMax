@@ -219,6 +219,7 @@ Code hook) — see [`integrations/opencode/`](integrations/opencode/).
 | **Attachments** | PDFs & images you read | PDF → page-delimited Markdown (drops the per-page image channel); images downscaled ≤1568px + recompressed | **−56%** on real PDFs |
 | **Logs** | verbose build/test/CI output | strip ANSI, collapse repeats (`×N`), fold stack traces, keep errors/warnings + head/tail | **−99%** |
 | **JSON / tool output** | big structured payloads | sample long arrays, truncate long strings, cap depth, minify whitespace; large uniform object arrays collapse to one inferred schema (`[N × {id:int, name:str, …}]`) | **−99%** |
+| **SARIF reports** | code-scanning JSON | tool/rule/result summary with representative findings and locations | report → findings digest |
 | **Lockfiles** | `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `poetry.lock`, `Cargo.lock`, `Gemfile.lock` | collapse to a `name@version` table; drop integrity hashes + resolved URLs | **−99%** |
 | **Minified assets** | `.min.js` / `.min.css` & single-line packed blobs | stub to one line (`<minified asset, N bytes — retrieve for source>`) | **−99%** |
 | **Notebooks** | `.ipynb` files | drop base64 image outputs, truncate cell outputs, keep code + markdown | **−99%** |
