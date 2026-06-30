@@ -201,6 +201,23 @@ def min_js(tmp_path):
 
 
 @pytest.fixture
+def big_markdown(tmp_path):
+    parts = ["# Product Spec\n", "Intro paragraph with important context.\n"]
+    for section in range(30):
+        parts.append(f"## Section {section}\n")
+        parts.append(("Detailed requirement text " + str(section) + ".\n") * 80)
+        if section % 5 == 0:
+            parts.append("```python\n")
+            parts.append(("print('example')\n") * 40)
+            parts.append("```\n")
+    parts.append("## Final Notes\n")
+    parts.append("Deployment caveats and rollout checklist.\n")
+    p = tmp_path / "SPEC.md"
+    p.write_text("\n".join(parts))
+    return str(p)
+
+
+@pytest.fixture
 def big_csv(tmp_path):
     rows = ["id,name,score"]
     rows += [f"{i},name{i},{i * 1.5}" for i in range(2000)]

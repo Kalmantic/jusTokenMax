@@ -169,6 +169,27 @@ def test_minified_dispatch_stub(min_js):
     assert cache.lookup_origin(res.output) == min_js
 
 
+def test_markdown_dispatch_builds_outline(big_markdown):
+    res = optimize(big_markdown)
+    assert res.ok and res.kind == "markdown"
+    assert res.output.endswith(".md.summary.md")
+    assert res.tokens_saved > 0
+    digest = Path(res.output).read_text(encoding="utf-8")
+    assert "Markdown summary" in digest
+    assert "L1: Product Spec" in digest
+    assert "Section 29" in digest
+    assert "Code Fences" in digest
+    assert digest.count("Detailed requirement text") < 20
+    assert cache.lookup_origin(res.output) == big_markdown
+
+
+def test_markdown_second_run_cache_hit(big_markdown):
+    first = optimize(big_markdown)
+    second = optimize(big_markdown)
+    assert first.cached is False and second.cached is True
+    assert second.output == first.output
+
+
 def test_small_image_skipped(small_image):
     res = optimize(small_image)
     assert res.ok is False
