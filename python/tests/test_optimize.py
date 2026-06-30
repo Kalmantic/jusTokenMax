@@ -169,6 +169,26 @@ def test_minified_dispatch_stub(min_js):
     assert cache.lookup_origin(res.output) == min_js
 
 
+def test_sourcemap_dispatch_summarizes_generated_map(big_sourcemap):
+    res = optimize(big_sourcemap)
+    assert res.ok and res.kind == "sourcemap"
+    assert res.output.endswith(".sourcemap.json")
+    assert res.tokens_saved > 0
+    digest = Path(res.output).read_text(encoding="utf-8")
+    assert '"count": 60' in digest
+    assert '"sourcesContent"' in digest
+    assert "export const value" not in digest
+    assert "AAAA,CAAC" not in digest
+    assert cache.lookup_origin(res.output) == big_sourcemap
+
+
+def test_sourcemap_second_run_cache_hit(big_sourcemap):
+    first = optimize(big_sourcemap)
+    second = optimize(big_sourcemap)
+    assert first.cached is False and second.cached is True
+    assert second.output == first.output
+
+
 def test_small_image_skipped(small_image):
     res = optimize(small_image)
     assert res.ok is False

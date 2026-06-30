@@ -115,6 +115,7 @@ Inspired by headroom / caveman / codegraph, built independently. ✅ has it ·
 | **Notebook (.ipynb) compression** | ✅ | ❌ | ❌ | ❌ |
 | **CSV / tabular sampling** | ✅ | ❌ | ❌ | ❌ |
 | **Git-diff compression** | ✅ | ❌ | ❌ | ❌ |
+| **Source-map compression** | ✅ | ❌ | ❌ | ❌ |
 | **Delta / incremental re-reads** | ✅ | ❌ | ❌ | ❌ |
 | **Secret + base64-blob redaction** | ✅ | ❌ | ❌ | ❌ |
 | Code symbol index + outline | ✅ | ❌ | ❌ | ✅ |
@@ -224,6 +225,7 @@ Code hook) — see [`integrations/opencode/`](integrations/opencode/).
 | **Notebooks** | `.ipynb` files | drop base64 image outputs, truncate cell outputs, keep code + markdown | **−99%** |
 | **CSV / tabular** | large tables | header + inferred column types + sample rows + row count | **−99%** |
 | **Git diffs** | lockfile/generated churn | keep code hunks, collapse lockfile/generated/minified file diffs to one line | lockfile → 1 line |
+| **Source maps** | generated `.map` bundles | keep bundle/source counts, elide mappings and embedded `sourcesContent` | generated map → metadata |
 | **Delta reads** | re-reading the same file | return only the diff since the last read, not the whole file | **−96%** |
 | **Redaction** | secrets & blobs in text | mask API keys/tokens/passwords, elide base64/data-URIs (tokens **+** safety) | safety + tokens |
 | **Code index + outline** | reading whole files to find code | symbol map (`file:line` + signature) + file outlines so you read only the relevant range | **−97%** to locate a symbol |
