@@ -34,9 +34,10 @@ returns the original path. Nothing is lost.
 Yes for the MCP tools — the `npx` launcher auto-provisions Python via `uv`. See
 [Installation](Installation).
 
-## How do I see how much it's saved?
+## How do I see how much it consumed and saved?
 
-`justokenmax stats` — a lifetime ledger of tokens saved, by kind.
+`justokenmax stats` — a lifetime ledger of optimized tokens consumed, original
+tokens before optimization, and tokens saved by kind.
 
 ## How do I turn features off?
 

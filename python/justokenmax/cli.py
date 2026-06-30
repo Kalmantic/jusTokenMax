@@ -148,10 +148,47 @@ def main(argv=None) -> int:
         if args.json:
             print(json.dumps(led))
         else:
-            total = led.get("total_tokens_saved", 0)
-            print(f"justokenmax: {total:,} tokens saved across {led.get('runs', 0)} runs")
-            for kind, n in sorted(led.get("by_kind", {}).items()):
-                print(f"  {kind:6} {n:,}")
+            saved = led.get("total_tokens_saved", 0)
+            consumed = led.get("total_tokens_consumed", 0)
+            original = led.get("total_tokens_original", 0)
+            runs = led.get("runs", 0)
+            usage_runs = led.get("usage_runs", 0)
+            run_word = "run" if runs == 1 else "runs"
+            usage_run_word = "run" if usage_runs == 1 else "runs"
+            if usage_runs and original:
+                tracked_saved = max(0, original - consumed)
+                pct = 100 * tracked_saved // original
+                if usage_runs == runs:
+                    print(f"justokenmax: {consumed:,} tokens consumed; "
+                          f"{saved:,} saved across {runs} {run_word} "
+                          f"(-{pct}%)")
+                else:
+                    print(f"justokenmax: {consumed:,} tokens consumed; "
+                          f"{tracked_saved:,} saved across "
+                          f"{usage_runs}/{runs} tracked {usage_run_word} "
+                          f"(-{pct}%)")
+                    print(f"             {saved:,} lifetime tokens saved total")
+                print(f"             {original:,} tokens without jusTokenMax")
+                kinds = sorted(set(led.get("by_kind", {})) |
+                               set(led.get("by_kind_consumed", {})))
+                for kind in kinds:
+                    kind_consumed = led.get("by_kind_consumed", {}).get(kind, 0)
+                    kind_original = led.get("by_kind_original", {}).get(kind, 0)
+                    kind_saved = (
+                        led.get("by_kind", {}).get(kind, 0)
+                        if usage_runs == runs
+                        else max(0, kind_original - kind_consumed)
+                    )
+                    print(f"  {kind:8} consumed "
+                          f"{kind_consumed:,}  saved {kind_saved:,}")
+            else:
+                print(f"justokenmax: {saved:,} tokens saved across "
+                      f"{runs} {run_word}")
+                if saved:
+                    print("             consumed/original totals will appear "
+                          "for new runs")
+                for kind, n in sorted(led.get("by_kind", {}).items()):
+                    print(f"  {kind:6} {n:,}")
         return 0
 
     if args.cmd == "index":
