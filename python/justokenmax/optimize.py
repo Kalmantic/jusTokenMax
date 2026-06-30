@@ -22,6 +22,7 @@ NDJSON_EXTS = {".ndjson", ".jsonl"}
 NB_EXTS = {".ipynb"}
 CSV_EXTS = {".csv", ".tsv"}
 DIFF_EXTS = {".diff", ".patch"}
+HTML_EXTS = {".html", ".htm"}
 # Source files we can compress to a signature-only skeleton (outline). Limited
 # to extensions the symbol parser (codeindex.LANGS) actually understands, so we
 # never promise an outline we can't produce.
@@ -152,6 +153,8 @@ def _kind_for(path: str) -> str:
         return "csv"
     if ext in DIFF_EXTS:
         return "diff"
+    if ext in HTML_EXTS:
+        return "html"
     if ext in CODE_EXTS:
         return "code"
     if ext in GENERIC_EXTS:
@@ -415,6 +418,33 @@ def optimize(
                              tokens_after, cached=False,
                              note=f"{stats['files_elided']}/{stats['files_total']} "
                                   f"files elided")
+
+    elif kind == "html":
+        if os.path.getsize(path) < LOG_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="HTML already small")
+        key, out = cache.cache_paths(path, opts, ".html.md")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "html", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .htmlcompress import compress_html
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        digest, stats = compress_html(raw)
+        if not stats.get("ok"):
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note=stats.get("note", "not useful HTML"))
+        digest = _redact(digest)
+        out.write_text(digest, encoding="utf-8")
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after})
+        res = OptimizeResult(True, "html", path, str(out), tokens_before,
+                             tokens_after, cached=False,
+                             note=f"{stats['headings']} headings, "
+                                  f"{stats['links']} links")
 
     elif kind == "code":
         if os.path.getsize(path) < CODE_MIN_BYTES:

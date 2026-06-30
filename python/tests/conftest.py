@@ -201,6 +201,32 @@ def min_js(tmp_path):
 
 
 @pytest.fixture
+def big_html(tmp_path):
+    body = "\n".join(
+        f"<p>Product row {i}: useful visible text for the page.</p>"
+        for i in range(600)
+    )
+    links = "\n".join(f'<a href="/items/{i}">Item {i}</a>' for i in range(80))
+    html = f"""<!doctype html>
+<html>
+  <head>
+    <title>Inventory Report</title>
+    <style>{'body{color:red;}' * 1000}</style>
+    <script>{'console.log(\"secret runtime noise\");' * 1000}</script>
+  </head>
+  <body>
+    <h1>Inventory</h1>
+    <h2>Warehouse A</h2>
+    {links}
+    {body}
+  </body>
+</html>"""
+    p = tmp_path / "report.html"
+    p.write_text(html)
+    return str(p)
+
+
+@pytest.fixture
 def big_csv(tmp_path):
     rows = ["id,name,score"]
     rows += [f"{i},name{i},{i * 1.5}" for i in range(2000)]
