@@ -16,6 +16,7 @@ PDF_EXTS = {".pdf"}
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
 LOG_EXTS = {".log"}
 JSON_EXTS = {".json"}
+SARIF_EXTS = {".sarif"}
 # Newline-delimited JSON: a whole-file json.loads fails, so it needs its own
 # line-by-line, shape-grouping path (see jsoncompress.compress_ndjson).
 NDJSON_EXTS = {".ndjson", ".jsonl"}
@@ -126,6 +127,8 @@ def _kind_by_name(path: str) -> Optional[str]:
     from .lockfile import is_minified_name, lock_flavor
     if lock_flavor(path):
         return "lockfile"
+    if path.lower().endswith(".sarif.json"):
+        return "sarif"
     if is_minified_name(path):
         return "minified"
     return None
@@ -144,6 +147,8 @@ def _kind_for(path: str) -> str:
         return "log"
     if ext in JSON_EXTS:
         return "json"
+    if ext in SARIF_EXTS:
+        return "sarif"
     if ext in NDJSON_EXTS:
         return "ndjson"
     if ext in NB_EXTS:
@@ -267,6 +272,33 @@ def optimize(
                              note=f"{stats.get('mode', 'sample')}: "
                                   f"{stats['bytes_before']//1024}KB -> "
                                   f"{stats['bytes_after']//1024}KB")
+
+    elif kind == "sarif":
+        if os.path.getsize(path) < JSON_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="SARIF already small")
+        key, out = cache.cache_paths(path, opts, ".sarif.md")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "sarif", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .sarif import compress_sarif
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        digest, stats = compress_sarif(raw)
+        if not stats.get("ok"):
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note=stats.get("note", "not SARIF"))
+        digest = _redact(digest)
+        out.write_text(digest, encoding="utf-8")
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after})
+        res = OptimizeResult(True, "sarif", path, str(out), tokens_before,
+                             tokens_after, cached=False,
+                             note=f"{stats['results']} results, "
+                                  f"{stats['rules']} rules")
 
     elif kind == "ndjson":
         if os.path.getsize(path) < NDJSON_MIN_BYTES:

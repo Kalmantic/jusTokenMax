@@ -169,6 +169,28 @@ def test_minified_dispatch_stub(min_js):
     assert cache.lookup_origin(res.output) == min_js
 
 
+def test_sarif_dispatch_summarizes_findings(big_sarif):
+    res = optimize(big_sarif)
+    assert res.ok and res.kind == "sarif"
+    assert res.output.endswith(".sarif.md")
+    assert res.tokens_saved > 0
+    digest = Path(res.output).read_text(encoding="utf-8")
+    assert "SARIF summary" in digest
+    assert "ExampleScanner" in digest
+    assert "results: 250" in digest
+    assert "no-eval" in digest
+    assert "src/file0.js:1" in digest
+    assert "partialFingerprints" not in digest
+    assert cache.lookup_origin(res.output) == big_sarif
+
+
+def test_sarif_json_name_routes_before_plain_json(tmp_path, big_sarif):
+    p = tmp_path / "scan.sarif.json"
+    p.write_text(Path(big_sarif).read_text(encoding="utf-8"))
+    res = optimize(str(p))
+    assert res.ok and res.kind == "sarif"
+
+
 def test_small_image_skipped(small_image):
     res = optimize(small_image)
     assert res.ok is False
