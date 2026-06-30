@@ -201,6 +201,35 @@ def min_js(tmp_path):
 
 
 @pytest.fixture
+def big_junit_xml(tmp_path):
+    cases = []
+    for i in range(300):
+        cases.append(
+            f'<testcase classname="pkg.TestSuite" name="test_ok_{i}" time="0.01"/>'
+        )
+    failure_body = "AssertionError: expected 1 got 2\n" + ("stack line\n" * 80)
+    cases.append(
+        '<testcase classname="pkg.TestSuite" name="test_failure" time="0.02">'
+        '<failure message="expected 1 got 2">'
+        + failure_body +
+        '</failure></testcase>'
+    )
+    cases.append(
+        '<testcase classname="pkg.TestSuite" name="test_skipped" time="0">'
+        '<skipped message="feature flag disabled"/></testcase>'
+    )
+    xml = (
+        '<testsuites tests="302" failures="1" errors="0" skipped="1">'
+        '<testsuite name="unit" tests="302" failures="1" errors="0" skipped="1">'
+        + "".join(cases) +
+        '</testsuite></testsuites>'
+    )
+    p = tmp_path / "TEST-unit.xml"
+    p.write_text(xml)
+    return str(p)
+
+
+@pytest.fixture
 def big_csv(tmp_path):
     rows = ["id,name,score"]
     rows += [f"{i},name{i},{i * 1.5}" for i in range(2000)]
