@@ -201,6 +201,24 @@ def min_js(tmp_path):
 
 
 @pytest.fixture
+def big_sourcemap(tmp_path):
+    import json
+    data = {
+        "version": 3,
+        "file": "bundle.js",
+        "sourceRoot": "",
+        "sources": [f"webpack://app/src/module{i}.ts" for i in range(60)],
+        "sourcesContent": [("export const value = " + str(i) + ";\n") * 400
+                           for i in range(60)],
+        "names": [f"name{i}" for i in range(200)],
+        "mappings": ";".join(["AAAA,CAAC,DAAD,EAAG"] * 8000),
+    }
+    p = tmp_path / "bundle.js.map"
+    p.write_text(json.dumps(data))
+    return str(p)
+
+
+@pytest.fixture
 def big_csv(tmp_path):
     rows = ["id,name,score"]
     rows += [f"{i},name{i},{i * 1.5}" for i in range(2000)]

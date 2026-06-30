@@ -16,6 +16,7 @@ PDF_EXTS = {".pdf"}
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
 LOG_EXTS = {".log"}
 JSON_EXTS = {".json"}
+SOURCEMAP_EXTS = {".map"}
 # Newline-delimited JSON: a whole-file json.loads fails, so it needs its own
 # line-by-line, shape-grouping path (see jsoncompress.compress_ndjson).
 NDJSON_EXTS = {".ndjson", ".jsonl"}
@@ -144,6 +145,8 @@ def _kind_for(path: str) -> str:
         return "log"
     if ext in JSON_EXTS:
         return "json"
+    if ext in SOURCEMAP_EXTS:
+        return "sourcemap"
     if ext in NDJSON_EXTS:
         return "ndjson"
     if ext in NB_EXTS:
@@ -267,6 +270,33 @@ def optimize(
                              note=f"{stats.get('mode', 'sample')}: "
                                   f"{stats['bytes_before']//1024}KB -> "
                                   f"{stats['bytes_after']//1024}KB")
+
+    elif kind == "sourcemap":
+        if os.path.getsize(path) < JSON_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="source map already small")
+        key, out = cache.cache_paths(path, opts, ".sourcemap.json")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "sourcemap", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .sourcemap import compress_sourcemap
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        digest, stats = compress_sourcemap(raw)
+        if not stats.get("ok"):
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note=stats.get("note", "not a source map"))
+        digest = _redact(digest)
+        out.write_text(digest, encoding="utf-8")
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after})
+        res = OptimizeResult(True, "sourcemap", path, str(out), tokens_before,
+                             tokens_after, cached=False,
+                             note=f"{stats['sources']} sources, "
+                                  f"{stats['sources_content']} contents elided")
 
     elif kind == "ndjson":
         if os.path.getsize(path) < NDJSON_MIN_BYTES:
