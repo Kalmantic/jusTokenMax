@@ -21,6 +21,7 @@ JSON_EXTS = {".json"}
 NDJSON_EXTS = {".ndjson", ".jsonl"}
 NB_EXTS = {".ipynb"}
 CSV_EXTS = {".csv", ".tsv"}
+MARKDOWN_EXTS = {".md", ".markdown"}
 DIFF_EXTS = {".diff", ".patch"}
 # Source files we can compress to a signature-only skeleton (outline). Limited
 # to extensions the symbol parser (codeindex.LANGS) actually understands, so we
@@ -150,6 +151,8 @@ def _kind_for(path: str) -> str:
         return "notebook"
     if ext in CSV_EXTS:
         return "csv"
+    if ext in MARKDOWN_EXTS:
+        return "markdown"
     if ext in DIFF_EXTS:
         return "diff"
     if ext in CODE_EXTS:
@@ -391,6 +394,36 @@ def optimize(
         res = OptimizeResult(True, "csv", path, str(out), tokens_before,
                              tokens_after, cached=False,
                              note=f"{stats['rows']} rows x {stats['cols']} cols")
+
+    elif kind == "markdown":
+        if os.path.getsize(path) < LOG_MIN_BYTES:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="markdown already small")
+        key, out = cache.cache_paths(path, opts, ".md.summary.md")
+        meta = cache.load_meta(key)
+        if meta and out.exists():
+            return OptimizeResult(True, "markdown", path, str(out),
+                                  meta["tokens_before"], meta["tokens_after"],
+                                  cached=True, note="cache hit")
+        from .markdown import compress_markdown
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+        digest, stats = compress_markdown(raw)
+        if not stats.get("ok"):
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note=stats.get("note", "markdown not useful"))
+        digest = _redact(digest)
+        tokens_before = text_tokens(raw)
+        tokens_after = text_tokens(digest)
+        if tokens_after >= tokens_before * 3 // 4:
+            return OptimizeResult(False, "skip", path, None, 0, 0, False,
+                                  note="markdown summary not smaller")
+        out.write_text(digest, encoding="utf-8")
+        cache.save_meta(key, {"tokens_before": tokens_before,
+                              "tokens_after": tokens_after})
+        res = OptimizeResult(True, "markdown", path, str(out), tokens_before,
+                             tokens_after, cached=False,
+                             note=f"{stats['headings']} headings, "
+                                  f"{stats['code_fences']} code fences")
 
     elif kind == "diff":
         if os.path.getsize(path) < DIFF_MIN_BYTES:
