@@ -25,7 +25,23 @@ def test_stats_json_reflects_runs(text_pdf, capsys):
     main(["stats", "--json"])
     led = json.loads(capsys.readouterr().out)
     assert led["runs"] >= 1
+    assert led["usage_runs"] >= 1
     assert led["total_tokens_saved"] > 0
+    assert led["total_tokens_consumed"] > 0
+    assert led["total_tokens_original"] == (
+        led["total_tokens_consumed"] + led["total_tokens_saved"]
+    )
+    assert led["by_kind_consumed"]["pdf"] > 0
+
+
+def test_stats_text_shows_consumed_and_saved(text_pdf, capsys):
+    main(["optimize", "--json", text_pdf])
+    capsys.readouterr()
+    main(["stats"])
+    out = capsys.readouterr().out
+    assert "tokens consumed" in out
+    assert "saved across" in out
+    assert "tokens without jusTokenMax" in out
 
 
 def test_optimize_unsupported_returns_nonzero(tmp_path, capsys):

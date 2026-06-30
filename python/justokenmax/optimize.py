@@ -477,5 +477,10 @@ def optimize(
         # `justokenmax retrieve <artifact>` can hand the full version back.
         cache.record_origin(res.output, res.source)
     if record and res.ok and not res.cached:
-        cache.record_savings(res.tokens_saved, res.kind)
+        cache.record_savings(
+            res.tokens_saved,
+            res.kind,
+            tokens_before=res.tokens_before,
+            tokens_after=res.tokens_after,
+        )
     return res

@@ -1,7 +1,8 @@
 ---
-description: Show lifetime token savings from jusTokenMax (attachments, logs, etc.).
+description: Show lifetime token consumption and savings from jusTokenMax.
 ---
 
 Run `justokenmax stats --json` (fallback `python3 -m justokenmax stats --json`) and
-present the totals in two lines: total tokens saved, number of runs, and the
-breakdown by kind (pdf, image, log).
+present the totals in two lines: tokens consumed after optimization, tokens that
+would have been consumed without jusTokenMax, tokens saved, number of runs, and
+the breakdown by kind.

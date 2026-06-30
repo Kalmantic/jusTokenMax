@@ -62,20 +62,73 @@ def save_meta(key: str, meta: dict) -> None:
     meta_path(key).write_text(json.dumps(meta, indent=2))
 
 
-def record_savings(tokens_saved: int, kind: str) -> dict:
+def _empty_ledger() -> dict:
+    return {
+        "total_tokens_saved": 0,
+        "total_tokens_consumed": 0,
+        "total_tokens_original": 0,
+        "runs": 0,
+        "usage_runs": 0,
+        "by_kind": {},
+        "by_kind_consumed": {},
+        "by_kind_original": {},
+    }
+
+
+def _normalize_ledger(data: dict) -> dict:
+    base = _empty_ledger()
+    if isinstance(data, dict):
+        base.update(data)
+    for key in (
+        "total_tokens_saved",
+        "total_tokens_consumed",
+        "total_tokens_original",
+        "runs",
+        "usage_runs",
+    ):
+        base[key] = int(base.get(key) or 0)
+    for key in ("by_kind", "by_kind_consumed", "by_kind_original"):
+        value = base.get(key)
+        base[key] = value if isinstance(value, dict) else {}
+    return base
+
+
+def record_savings(
+    tokens_saved: int,
+    kind: str,
+    *,
+    tokens_before: Optional[int] = None,
+    tokens_after: Optional[int] = None,
+) -> dict:
     """Add to the lifetime ledger and return the updated totals."""
     ROOT.mkdir(parents=True, exist_ok=True)
     _harden(ROOT)
-    data = {"total_tokens_saved": 0, "runs": 0, "by_kind": {}}
+    data = _empty_ledger()
     if LEDGER.exists():
         try:
-            data = json.loads(LEDGER.read_text())
+            data = _normalize_ledger(json.loads(LEDGER.read_text()))
         except json.JSONDecodeError:
-            data = {"total_tokens_saved": 0, "runs": 0, "by_kind": {}}
+            data = _empty_ledger()
     data["total_tokens_saved"] = data.get("total_tokens_saved", 0) + tokens_saved
     data["runs"] = data.get("runs", 0) + 1
     data.setdefault("by_kind", {})
     data["by_kind"][kind] = data["by_kind"].get(kind, 0) + tokens_saved
+    if tokens_before is not None and tokens_after is not None:
+        data["total_tokens_original"] = (
+            data.get("total_tokens_original", 0) + tokens_before
+        )
+        data["total_tokens_consumed"] = (
+            data.get("total_tokens_consumed", 0) + tokens_after
+        )
+        data["usage_runs"] = data.get("usage_runs", 0) + 1
+        data.setdefault("by_kind_original", {})
+        data.setdefault("by_kind_consumed", {})
+        data["by_kind_original"][kind] = (
+            data["by_kind_original"].get(kind, 0) + tokens_before
+        )
+        data["by_kind_consumed"][kind] = (
+            data["by_kind_consumed"].get(kind, 0) + tokens_after
+        )
     LEDGER.write_text(json.dumps(data, indent=2))
     return data
 
@@ -83,10 +136,10 @@ def record_savings(tokens_saved: int, kind: str) -> dict:
 def read_ledger() -> dict:
     if LEDGER.exists():
         try:
-            return json.loads(LEDGER.read_text())
+            return _normalize_ledger(json.loads(LEDGER.read_text()))
         except json.JSONDecodeError:
-            return {"total_tokens_saved": 0, "runs": 0, "by_kind": {}}
-    return {"total_tokens_saved": 0, "runs": 0, "by_kind": {}}
+            return _empty_ledger()
+    return _empty_ledger()
 
 
 ORIGINS = CACHE_DIR / "origins.json"

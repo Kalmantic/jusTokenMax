@@ -64,7 +64,7 @@ PY
   echo "ERROR: build failed"; } > build.log
 
 justokenmax optimize products.csv build.log     # -> ~ -99% each
-justokenmax stats                                # running total of tokens saved
+justokenmax stats                                # running total consumed + saved
 
 # turn a lever off — your project, your way
 justokenmax config disable csv
