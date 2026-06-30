@@ -169,6 +169,27 @@ def test_minified_dispatch_stub(min_js):
     assert cache.lookup_origin(res.output) == min_js
 
 
+def test_html_dispatch_extracts_visible_digest(big_html):
+    res = optimize(big_html)
+    assert res.ok and res.kind == "html"
+    assert res.output.endswith(".html.md")
+    assert res.tokens_saved > 0
+    digest = Path(res.output).read_text(encoding="utf-8")
+    assert "Inventory Report" in digest
+    assert "## Warehouse A" in digest
+    assert "/items/0" in digest
+    assert "secret runtime noise" not in digest
+    assert "body{color:red" not in digest
+    assert cache.lookup_origin(res.output) == big_html
+
+
+def test_html_second_run_cache_hit(big_html):
+    first = optimize(big_html)
+    second = optimize(big_html)
+    assert first.cached is False and second.cached is True
+    assert second.output == first.output
+
+
 def test_small_image_skipped(small_image):
     res = optimize(small_image)
     assert res.ok is False
